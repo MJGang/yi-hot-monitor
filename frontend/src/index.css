@@ -1,0 +1,682 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-display: "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  /* Light mode colors */
+  --color-cream: #FFF9F5;
+  --color-cream-dark: #FFF5EB;
+  --color-cream-light: #FFFDF9;
+  --color-vanilla: #FEF7F0;
+  --color-coral: #FF8A80;
+  --color-coral-dark: #E57373;
+  --color-coral-light: #FFB4AB;
+  --color-mint: #7DCTAA;
+  --color-mint-dark: #5FB88F;
+  --color-mint-light: #A8E6CF;
+  --color-sunshine: #FFD93D;
+  --color-sunshine-dark: #F5C400;
+  --color-sunshine-light: #FFF3B0;
+  --color-lavender: #C9B1FF;
+  --color-lavender-dark: #A78BFA;
+  --color-lavender-light: #E0D6FF;
+  --color-sky: #74B9FF;
+  --color-sky-dark: #4A9EE8;
+  --color-sky-light: #A8D8FF;
+  --color-peach: #FFAAA5;
+  --color-bubblegum: #FF99C8;
+  --color-text-primary: #1A1A2E;
+  --color-text-secondary: #4A5568;
+  --color-text-muted: #A0AEC0;
+
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+}
+
+/* 告诉 Tailwind：当 html 包含 .dark-theme 类，
+   或者处于 .auto-theme 且系统偏好深色时，应用 dark: 样式 */
+@custom-variant dark (
+  &:where(.dark-theme, .dark-theme *, .auto-theme, .auto-theme *)
+);
+
+/* iOS-style Dark Mode */
+@media (prefers-color-scheme: dark) {
+  :root.auto-theme,
+  :root.dark-theme {
+    /* iOS uses true black for OLED displays */
+    --color-cream: #000000;
+    --color-cream-dark: #0A0A0A;
+    --color-cream-light: #141414;
+    --color-vanilla: #1C1C1E;
+
+    /* Accent colors - iOS vibrant colors for dark mode */
+    --color-coral: #FF6961;
+    --color-coral-dark: #FF6B61;
+    --color-coral-light: #FF948F;
+    --color-mint: #30D158;
+    --color-mint-dark: #34C759;
+    --color-mint-light: #5EE890;
+    --color-sunshine: #FFD60A;
+    --color-sunshine-dark: #F5C400;
+    --color-sunshine-light: #FFE66D;
+    --color-lavender: #BF5AF2;
+    --color-lavender-dark: #D78FFF;
+    --color-lavender-light: #E8BEFF;
+    --color-sky: #0A84FF;
+    --color-sky-dark: #32D2F9;
+    --color-sky-light: #64D2FF;
+    --color-peach: #FF9F89;
+    --color-bubblegum: #FF2D92;
+
+    /* iOS dark mode text hierarchy */
+    --color-text-primary: #FFFFFF;
+    --color-text-secondary: rgba(255, 255, 255, 0.7);
+    --color-text-muted: rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* Force dark theme - iOS style */
+.dark-theme {
+  --color-cream: #000000;
+  --color-cream-dark: #0A0A0A;
+  --color-cream-light: #141414;
+  --color-vanilla: #1C1C1E;
+
+  --color-coral: #FF6961;
+  --color-coral-dark: #FF6B61;
+  --color-coral-light: #FF948F;
+  --color-mint: #30D158;
+  --color-mint-dark: #34C759;
+  --color-mint-light: #5EE890;
+  --color-sunshine: #FFD60A;
+  --color-sunshine-dark: #F5C400;
+  --color-sunshine-light: #FFE66D;
+  --color-lavender: #BF5AF2;
+  --color-lavender-dark: #D78FFF;
+  --color-lavender-light: #E8BEFF;
+  --color-sky: #0A84FF;
+  --color-sky-dark: #32D2F9;
+  --color-sky-light: #64D2FF;
+  --color-peach: #FF9F89;
+  --color-bubblegum: #FF2D92;
+
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  --color-text-muted: rgba(255, 255, 255, 0.4);
+}
+
+/* Force light theme */
+.light-theme {
+  --color-cream: #FFF9F5;
+  --color-cream-dark: #FFF5EB;
+  --color-cream-light: #FFFDF9;
+  --color-vanilla: #FEF7F0;
+  --color-coral: #FF8A80;
+  --color-coral-dark: #E57373;
+  --color-coral-light: #FFB4AB;
+  --color-mint: #7DCTAA;
+  --color-mint-dark: #5FB88F;
+  --color-mint-light: #A8E6CF;
+  --color-sunshine: #FFD93D;
+  --color-sunshine-dark: #F5C400;
+  --color-sunshine-light: #FFF3B0;
+  --color-lavender: #C9B1FF;
+  --color-lavender-dark: #A78BFA;
+  --color-lavender-light: #E0D6FF;
+  --color-sky: #74B9FF;
+  --color-sky-dark: #4A9EE8;
+  --color-sky-light: #A8D8FF;
+  --color-peach: #FFAAA5;
+  --color-bubblegum: #FF99C8;
+  --color-text-primary: #1A1A2E;
+  --color-text-secondary: #4A5568;
+  --color-text-muted: #A0AEC0;
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(191, 90, 242, 0.4) transparent;
+  }
+
+  body {
+    font-family: var(--font-body);
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* iOS-style Dark Background */
+.dark-theme .liquid-bg,
+.auto-theme .liquid-bg {
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 5%, rgba(191, 90, 242, 0.3) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 90% 8%, rgba(10, 132, 255, 0.25) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 88% 90%, rgba(48, 209, 88, 0.2) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 12% 92%, rgba(255, 69, 58, 0.25) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 35% at 50% 15%, rgba(255, 214, 10, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 40% at 50% 85%, rgba(255, 159, 137, 0.2) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 75% 50%, rgba(90, 200, 250, 0.15) 0%, transparent 50%),
+    linear-gradient(160deg, var(--color-cream) 0%, var(--color-cream-dark) 35%, var(--color-cream-light) 100%);
+}
+
+/* iOS Dark Glass Effect */
+.dark-theme .liquid-glass,
+.auto-theme .liquid-glass {
+  background: rgba(28, 28, 30, 0.6);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .liquid-glass:hover,
+.auto-theme .liquid-glass:hover {
+  background: rgba(44, 44, 46, 0.7);
+}
+
+/* iOS Dark Card Effect */
+.dark-theme .liquid-card,
+.auto-theme .liquid-card {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(28, 28, 30, 0.6) 0%,
+      rgba(28, 28, 30, 0.3) 40%,
+      rgba(28, 28, 30, 0.15) 60%,
+      rgba(28, 28, 30, 0.08) 100%
+    );
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .liquid-card:hover,
+.auto-theme .liquid-card:hover {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(44, 44, 46, 0.7) 0%,
+      rgba(44, 44, 46, 0.4) 40%,
+      rgba(44, 44, 46, 0.2) 60%,
+      rgba(44, 44, 46, 0.1) 100%
+    );
+}
+
+/* iOS Dark Icon Pill */
+.dark-theme .icon-pill,
+.auto-theme .icon-pill {
+  background: rgba(28, 28, 30, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* iOS Dark Nav Item */
+.dark-theme .nav-item:hover,
+.auto-theme .nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark-theme .nav-item.active,
+.auto-theme .nav-item.active {
+  background: rgba(255, 255, 255, 0.12);
+  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 4px 20px rgba(191, 90, 242, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* iOS Dark Input */
+.dark-theme .glass-input,
+.dark-theme .glass-select,
+.auto-theme .glass-input,
+.auto-theme .glass-select {
+  background: rgba(28, 28, 30, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary);
+}
+
+.dark-theme .glass-input:focus,
+.dark-theme .glass-select:focus,
+.auto-theme .glass-input:focus,
+.auto-theme .glass-select:focus {
+  background: rgba(44, 44, 46, 0.7);
+  border-color: rgba(191, 90, 242, 0.5);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 3px rgba(191, 90, 242, 0.15);
+}
+
+/* iOS Dark Button */
+.dark-theme .glass-btn,
+.auto-theme .glass-btn {
+  background: rgba(28, 28, 30, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .glass-btn:hover,
+.auto-theme .glass-btn:hover {
+  background: rgba(44, 44, 46, 0.7);
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.3),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* iOS Dark Primary Button */
+.dark-theme .glass-btn-primary,
+.auto-theme .glass-btn-primary {
+  background: rgba(48, 209, 88, 0.25);
+  backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(48, 209, 88, 0.4);
+  box-shadow:
+    0 4px 20px rgba(48, 209, 88, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+}
+
+.dark-theme .glass-btn-primary:hover,
+.auto-theme .glass-btn-primary:hover {
+  background: rgba(48, 209, 88, 0.35);
+  box-shadow:
+    0 8px 32px rgba(48, 209, 88, 0.25),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* iOS Dark Toggle */
+.dark-theme .toggle-switch,
+.auto-theme .toggle-switch {
+  background: rgba(28, 28, 30, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark-theme .toggle-switch.active,
+.auto-theme .toggle-switch.active {
+  background: rgba(48, 209, 88, 0.4);
+  border-color: rgba(48, 209, 88, 0.3);
+}
+
+/* Light mode backgrounds */
+.liquid-bg {
+  background:
+    radial-gradient(ellipse 80% 60% at 10% 5%, rgba(201, 177, 255, 0.7) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 90% 8%, rgba(116, 185, 255, 0.65) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 88% 90%, rgba(125, 205, 170, 0.6) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 12% 92%, rgba(255, 138, 128, 0.55) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 35% at 50% 15%, rgba(255, 217, 61, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 40% at 50% 85%, rgba(255, 170, 165, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 30% at 75% 50%, rgba(168, 216, 255, 0.3) 0%, transparent 50%),
+    linear-gradient(160deg, var(--color-cream) 0%, var(--color-cream-dark) 35%, var(--color-cream-light) 100%);
+}
+
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+}
+
+.liquid-glass:hover {
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+}
+
+.liquid-card {
+  position: relative;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.15) 40%,
+      rgba(255, 255, 255, 0.08) 60%,
+      rgba(255, 255, 255, 0.03) 100%
+    );
+  backdrop-filter: blur(40px) saturate(180%) brightness(1.05);
+  -webkit-backdrop-filter: blur(40px) saturate(180%) brightness(1.05);
+  border: 0.5px solid rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.05);
+}
+
+.liquid-card:hover {
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.45) 0%,
+      rgba(255, 255, 255, 0.2) 40%,
+      rgba(255, 255, 255, 0.1) 60%,
+      rgba(255, 255, 255, 0.05) 100%
+    );
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.05);
+}
+
+.icon-pill {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.nav-item {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 16px;
+  margin: 2px 8px;
+  background: transparent;
+  border: 0.5px solid transparent;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.nav-item.active {
+  background: rgba(255, 255, 255, 0.45);
+  border: 0.5px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 4px 20px rgba(201, 177, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.glass-input, .glass-select {
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus, .glass-select:focus {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(201, 177, 255, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 3px rgba(201, 177, 255, 0.15);
+  outline: none;
+}
+
+.glass-btn {
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.glass-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.glass-btn-primary {
+  background: rgba(125, 205, 170, 0.5);
+  backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(125, 205, 170, 0.6);
+  box-shadow:
+    0 4px 20px rgba(125, 205, 170, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.glass-btn-primary:hover {
+  background: rgba(125, 205, 170, 0.65);
+  box-shadow:
+    0 8px 32px rgba(125, 205, 170, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 52px;
+  height: 30px;
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 15px;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 0.5px solid rgba(255, 255, 255, 0.3);
+}
+
+.toggle-switch.active {
+  background: rgba(125, 205, 170, 0.6);
+  border-color: rgba(125, 205, 170, 0.5);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  background: white;
+  border-radius: 50%;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.toggle-switch.active::after {
+  left: 25px;
+}
+
+.badge-urgent {
+  background: linear-gradient(135deg, rgba(255,138,128,0.7), rgba(255,180,171,0.7));
+}
+
+.badge-high {
+  background: linear-gradient(135deg, rgba(116,185,255,0.7), rgba(168,216,255,0.7));
+}
+
+.badge-medium {
+  background: linear-gradient(135deg, rgba(255,217,61,0.7), rgba(255,243,176,0.7));
+  color: var(--color-text-primary);
+}
+
+.badge-low {
+  background: linear-gradient(135deg, rgba(125,205,170,0.7), rgba(168,230,207,0.7));
+}
+
+.window-frame {
+  overflow: hidden;
+}
+
+/* iOS Dark Mode title bar buttons */
+.dark-theme .liquid-glass button:hover,
+.auto-theme .liquid-glass button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark mode text colors - must override Tailwind's compiled values */
+.dark-theme,
+.auto-theme {
+  color-scheme: dark;
+}
+
+.dark-theme .text-text-primary,
+.auto-theme .text-text-primary {
+  color: #FFFFFF !important;
+}
+
+.dark-theme .text-text-secondary,
+.auto-theme .text-text-secondary {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.dark-theme .text-text-muted,
+.auto-theme .text-text-muted {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Dark mode accent text colors */
+.dark-theme .text-coral-dark,
+.auto-theme .text-coral-dark {
+  color: #FF6B61 !important;
+}
+
+.dark-theme .text-mint-dark,
+.auto-theme .text-mint-dark {
+  color: #34C759 !important;
+}
+
+.dark-theme .text-lavender-dark,
+.auto-theme .text-lavender-dark {
+  color: #D78FFF !important;
+}
+
+.dark-theme .text-sky,
+.auto-theme .text-sky {
+  color: #32D2F9 !important;
+}
+
+.dark-theme .text-coral,
+.auto-theme .text-coral {
+  color: #FF6961 !important;
+}
+
+.dark-theme .text-mint,
+.auto-theme .text-mint {
+  color: #30D158 !important;
+}
+
+.dark-theme .text-lavender,
+.auto-theme .text-lavender {
+  color: #BF5AF2 !important;
+}
+
+.dark-theme .text-sky-dark,
+.auto-theme .text-sky-dark {
+  color: #32D2F9 !important;
+}
+
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-3px);
+}
+
+.liquid-toast {
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.dark-theme .liquid-toast,
+.auto-theme .liquid-toast {
+  background: rgba(28, 28, 30, 0.85);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark Mode Glare Card */
+/* .dark-theme .glare-card,
+.auto-theme .glare-card {
+  background: rgba(28, 28, 30, 0.85);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-theme .glare-card:hover,
+.auto-theme .glare-card:hover {
+  background: rgba(44, 44, 46, 0.9);
+  border-color: rgba(191, 90, 242, 0.3);
+}
+
+.expand-content {
+  transition: all 0.3s ease;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 4s linear infinite;
+} */
+
+/* Glare Card Styles */
+/* .glass-card,
+.glass-card-dark {
+  background: rgba(255, 255, 255, 0.9);
+  border: 0.5px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.glass-card-dark {
+  background: rgba(28, 28, 30, 0.85);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-card-dark.is-hovered {
+  background: rgba(44, 44, 46, 0.9);
+  border-color: rgba(191, 90, 242, 0.3);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+} */
