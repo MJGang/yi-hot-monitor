@@ -15,6 +15,27 @@ This is an AI Hotspot Monitor tool for AI programming bloggers to automatically 
 - **Real-time**: Socket.io for browser push notifications
 - **Scheduling**: node-cron for periodic hotspot fetching (every 30 min)
 
+## git commit message rule
+
+commit message 必须符合 Conventional Commits 规范，格式如下：
+
+```
+<type>: <short summary>
+```
+
+其中，`<type>` 是 commit 类型，可以是以下之一：
+
+- `feat`: 新功能（feature）
+- `fix`: 修复 bug
+- `docs`: 文档更新
+- `style`: 代码格式（不影响代码运行的变动）
+- `refactor`: 重构（即不是新增功能，也不是修改bug的代码变动）
+- `perf`: 性能优化
+- `test`: 增加测试
+- `chore`: 构建过程或辅助工具的变动
+
+`<short summary>` 是 commit 的简短描述，应该简洁明了，不超过 50 个字符。不要是比较笼统的内容，例如 "更新代码" 或 "修复 bug"，应该具体描述 commit 的内容。
+
 ## Commands
 
 ### Backend (server/)
