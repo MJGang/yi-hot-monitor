@@ -1,34 +1,53 @@
 # 🔌 API 集成技术文档
 
-## 1. OpenRouter API 集成
+## 1. LLM 配置 (LangChain + LangGraph)
 
-### 1.1 SDK 安装
+### 1.1 安装依赖
 
 ```bash
-npm install @openrouter/sdk
+uv add langchain langchain-deepseek langchain-core
+uv add langgraph
 ```
 
-### 1.2 基本配置
+### 1.2 DeepSeek 配置
 
-```typescript
-import { OpenRouter } from "@openrouter/sdk";
+```python
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import StrOutputParser
 
-const openRouter = new OpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY ?? "",
-});
+# DeepSeek 配置
+llm = ChatOpenAI(
+    model="deepseek-chat",
+    openai_api_key=os.getenv("DEEPSEEK_API_KEY"),
+    openai_api_base="https://api.deepseek.com",
+    temperature=0.3,
+)
 ```
 
-### 1.3 Chat Completion 调用
+### 1.3 MiniMax 配置
 
-```typescript
-// 非流式调用
-async function analyzeHotspot(content: string) {
-  const result = await openRouter.chat.send({
-    model: "openai/gpt-4",
-    messages: [
-      {
-        role: "system",
-        content: `你是一个热点分析专家，请分析以下内容：
+```python
+from langchain_openai import ChatOpenAI
+
+# MiniMax 配置
+llm = ChatOpenAI(
+    model="MiniMax-Text-01",
+    openai_api_key=os.getenv("MINIMAX_API_KEY"),
+    openai_api_base="https://api.minimax.chat/v1",
+    temperature=0.3,
+)
+```
+
+### 1.4 热点分析 Chain
+
+```python
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import StrOutputParser
+from langchain.output_parsers import JsonOutputParser
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", """你是一个热点分析专家，请分析以下内容：
 1. 判断是否为真实的热点新闻（排除标题党、假新闻）
 2. 评估该热点与 AI 编程领域的相关性（0-100分）
 3. 评估热点的重要程度（low/medium/high/urgent）
@@ -40,46 +59,50 @@ async function analyzeHotspot(content: string) {
   "relevance": 0-100,
   "importance": "low/medium/high/urgent",
   "summary": "..."
-}`
-      },
-      {
-        role: "user",
-        content: content
-      }
-    ],
-    stream: false,
-    temperature: 0.3,
-    maxTokens: 500
-  });
+}"""),
+    ("user", "{content}")
+])
 
-  return JSON.parse(result.choices[0].message.content);
-}
+output_parser = JsonOutputParser()
+chain = prompt | llm | output_parser
+
+async def analyze_hotspot(content: str) -> dict:
+    result = await chain.ainvoke({"content": content})
+    return result
 ```
 
-### 1.4 响应格式
+### 1.5 LangGraph 工作流
 
-```json
-{
-  "id": "chatcmpl-xxxxxxxxxxxxxxxxx",
-  "object": "chat.completion",
-  "created": 1677652288,
-  "model": "openai/gpt-4",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "{\"isReal\": true, \"relevance\": 85, \"importance\": \"high\", \"summary\": \"...\"}"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 15,
-    "total_tokens": 25
-  }
-}
+```python
+from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+class HotspotState(TypedDict):
+    content: str
+    source: str
+    url: str
+    analysis: dict | None
+
+def analyze_node(state: HotspotState) -> HotspotState:
+    """AI 分析节点"""
+    result = analyze_hotspot_sync(state["content"])
+    return {"analysis": result}
+
+def should_notify(state: HotspotState) -> bool:
+    """判断是否发送通知"""
+    if not state["analysis"]:
+        return False
+    return state["analysis"].get("isReal", False) and state["analysis"].get("relevance", 0) > 60
+
+workflow = StateGraph(HotspotState)
+workflow.add_node("analyze", analyze_node)
+workflow.set_entry_point("analyze")
+workflow.add_conditional_edges(
+    "analyze",
+    should_notify,
+    {True: END, False: END}
+)
+app = workflow.compile()
 ```
 
 ---
@@ -88,14 +111,16 @@ async function analyzeHotspot(content: string) {
 
 ### 2.1 认证
 
-```typescript
-const TWITTER_API_BASE = 'https://api.twitterapi.io';
-const TWITTER_API_KEY = process.env.TWITTER_API_KEY;
+```python
+import httpx
 
-const headers = {
-  'X-API-Key': TWITTER_API_KEY,
-  'Content-Type': 'application/json'
-};
+TWITTER_API_BASE = 'https://api.twitterapi.io'
+TWITTER_API_KEY = os.getenv("TWITTER_API_KEY")
+
+headers = {
+    'X-API-Key': TWITTER_API_KEY,
+    'Content-Type': 'application/json'
+}
 ```
 
 ### 2.2 高级搜索 API
@@ -116,24 +141,19 @@ from:OpenAI OR from:Anthropic
 
 **请求示例:**
 
-```typescript
-async function searchTwitter(query: string, cursor?: string) {
-  const params = new URLSearchParams({
-    query: query,
-    queryType: 'Latest'
-  });
-  
-  if (cursor) {
-    params.append('cursor', cursor);
-  }
+```python
+async def search_twitter(query: str, cursor: str | None = None):
+    async with httpx.AsyncClient() as client:
+        params = {"query": query, "queryType": "Latest"}
+        if cursor:
+            params["cursor"] = cursor
 
-  const response = await fetch(
-    `${TWITTER_API_BASE}/twitter/tweet/advanced_search?${params}`,
-    { headers }
-  );
-
-  return response.json();
-}
+        response = await client.get(
+            f"{TWITTER_API_BASE}/twitter/tweet/advanced_search",
+            params=params,
+            headers=headers
+        )
+        return response.json()
 ```
 
 **响应格式:**
@@ -176,14 +196,15 @@ async function searchTwitter(query: string, cursor?: string) {
 
 **Endpoint:** `GET /twitter/trends`
 
-```typescript
-async function getTrends(woeid: number = 1) { // 1 = Worldwide
-  const response = await fetch(
-    `${TWITTER_API_BASE}/twitter/trends?woeid=${woeid}`,
-    { headers }
-  );
-  return response.json();
-}
+```python
+async def get_trends(woeid: int = 1):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{TWITTER_API_BASE}/twitter/trends",
+            params={"woeid": woeid},
+            headers=headers
+        )
+        return response.json()
 ```
 
 ---
@@ -192,319 +213,316 @@ async function getTrends(woeid: number = 1) { // 1 = Worldwide
 
 ### 3.1 Bing 搜索爬虫
 
-```typescript
-import axios from 'axios';
-import * as cheerio from 'cheerio';
+```python
+import httpx
+from selectolax.parser import HTMLParser
 
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36...',
-];
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36...',
+]
 
-async function searchBing(query: string): Promise<SearchResult[]> {
-  const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-  
-  const response = await axios.get('https://www.bing.com/search', {
-    params: { q: query },
-    headers: { 'User-Agent': userAgent }
-  });
+async def search_bing(query: str) -> list[dict]:
+    user_agent = random.choice(USER_AGENTS)
 
-  const $ = cheerio.load(response.data);
-  const results: SearchResult[] = [];
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            'https://www.bing.com/search',
+            params={"q": query},
+            headers={"User-Agent": user_agent}
+        )
 
-  $('li.b_algo').each((_, element) => {
-    const title = $(element).find('h2 a').text();
-    const url = $(element).find('h2 a').attr('href');
-    const snippet = $(element).find('.b_caption p').text();
-    
-    if (title && url) {
-      results.push({ title, url, snippet, source: 'bing' });
-    }
-  });
+    parser = HTMLParser(response.text)
+    results = []
 
-  return results;
-}
+    for item in parser.css('li.b_algo'):
+        title = item.css_first('h2 a')
+        caption = item.css_first('.b_caption p')
+        if title:
+            results.append({
+                "title": title.text(),
+                "url": title.attrs.get('href'),
+                "snippet": caption.text() if caption else "",
+                "source": "bing"
+            })
+
+    return results
 ```
 
 ### 3.2 频率控制
 
-```typescript
-class RateLimiter {
-  private queue: (() => Promise<void>)[] = [];
-  private processing = false;
-  private lastRequestTime = 0;
-  private minInterval = 5000; // 5 秒间隔
+```python
+import asyncio
+import time
 
-  async add<T>(fn: () => Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      this.queue.push(async () => {
-        try {
-          const result = await fn();
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      });
-      this.process();
-    });
-  }
+class RateLimiter:
+    def __init__(self, min_interval: float = 5.0):
+        self.min_interval = min_interval
+        self.last_request_time = 0.0
+        self._lock = asyncio.Lock()
 
-  private async process() {
-    if (this.processing || this.queue.length === 0) return;
-    
-    this.processing = true;
-    
-    while (this.queue.length > 0) {
-      const elapsed = Date.now() - this.lastRequestTime;
-      if (elapsed < this.minInterval) {
-        await new Promise(r => setTimeout(r, this.minInterval - elapsed));
-      }
-      
-      const task = this.queue.shift();
-      if (task) {
-        this.lastRequestTime = Date.now();
-        await task();
-      }
-    }
-    
-    this.processing = false;
-  }
-}
+    async def acquire(self):
+        async with self._lock:
+            elapsed = time.time() - self.last_request_time
+            if elapsed < self.min_interval:
+                await asyncio.sleep(self.min_interval - elapsed)
+            self.last_request_time = time.time()
 ```
 
 ---
 
-## 4. Prisma + SQLite 配置
+## 4. SQLAlchemy + SQLite 配置
 
-### 4.1 Schema 定义
+### 4.1 模型定义
 
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
+```python
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship
+from datetime import datetime
 
-datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
-}
+Base = declarative_base()
 
-model Keyword {
-  id        String    @id @default(uuid())
-  text      String    @unique
-  category  String?
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  hotspots  Hotspot[]
-}
+class Keyword(Base):
+    __tablename__ = "keywords"
 
-model Hotspot {
-  id          String   @id @default(uuid())
-  title       String
-  content     String
-  url         String
-  source      String   // twitter, bing, google
-  sourceId    String?  // 原始推文ID等
-  isReal      Boolean  @default(true)
-  relevance   Int      @default(0)
-  importance  String   @default("low")
-  summary     String?
-  viewCount   Int?
-  likeCount   Int?
-  retweetCount Int?
-  publishedAt DateTime?
-  createdAt   DateTime @default(now())
-  keywordId   String?
-  keyword     Keyword? @relation(fields: [keywordId], references: [id])
-  
-  @@unique([url, source])
-}
+    id = Column(String, primary_key=True)
+    text = Column(String, unique=True, nullable=False)
+    category = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-model Notification {
-  id        String   @id @default(uuid())
-  type      String   // hotspot, alert
-  title     String
-  content   String
-  isRead    Boolean  @default(false)
-  hotspotId String?
-  createdAt DateTime @default(now())
-}
+    hotspots = relationship("Hotspot", back_populates="keyword")
 
-model Setting {
-  id    String @id @default(uuid())
-  key   String @unique
-  value String
-}
+class Hotspot(Base):
+    __tablename__ = "hotspots"
+
+    id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    url = Column(String, nullable=False)
+    source = Column(String, nullable=False)  # twitter, bing, google
+    source_id = Column(String, nullable=True)
+    is_real = Column(Boolean, default=True)
+    relevance = Column(Integer, default=0)
+    importance = Column(String, default="low")
+    summary = Column(Text, nullable=True)
+    view_count = Column(Integer, nullable=True)
+    like_count = Column(Integer, nullable=True)
+    retweet_count = Column(Integer, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    keyword_id = Column(String, ForeignKey("keywords.id"), nullable=True)
+
+    keyword = relationship("Keyword", back_populates="hotspots")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True)
+    type = Column(String, nullable=False)  # hotspot, alert
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    hotspot_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    id = Column(String, primary_key=True)
+    key = Column(String, unique=True, nullable=False)
+    value = Column(String, nullable=False)
 ```
 
-### 4.2 迁移命令
+### 4.2 数据库会话
+
+```python
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+# MySQL 配置示例
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "mysql+aiomysql://user:password@localhost:3306/hotspot_db"
+)
+
+engine = create_async_engine(DATABASE_URL, echo=True)
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+async def get_db():
+    async with async_session() as session:
+        yield session
+```
+
+### 4.3 迁移 (Alembic)
 
 ```bash
-# 初始化数据库
-npx prisma migrate dev --name init
+# 初始化 alembic
+uv run alembic init alembic
 
-# 生成 Prisma Client
-npx prisma generate
-```
+# 生成迁移
+uv run alembic revision --autogenerate -m "init"
 
-### 4.3 环境变量
-
-```env
-DATABASE_URL="file:./dev.db"
+# 执行迁移
+uv run alembic upgrade head
 ```
 
 ---
 
-## 5. Express + WebSocket 配置
+## 5. FastAPI + WebSocket 配置
 
 ### 5.1 服务器配置
 
-```typescript
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import socketio
 
-const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST']
-  }
-});
+app = FastAPI()
+sio = socketio.AsyncServer(
+    async_mode='asgi',
+    cors={
+        "origins": ["http://localhost:5173"],
+        "methods": ["GET", "POST"]
+    }
+)
 
-app.use(cors());
-app.use(express.json());
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-// WebSocket 连接
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  
-  socket.on('subscribe', (keywords: string[]) => {
-    keywords.forEach(kw => socket.join(`keyword:${kw}`));
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
+# Socket.io 挂载到 FastAPI
+socket_app = socketio.ASGIApp(sio, app)
 
-// 发送热点通知
-function notifyNewHotspot(hotspot: Hotspot) {
-  io.to(`keyword:${hotspot.keyword?.text}`).emit('hotspot:new', hotspot);
-  io.emit('notification', {
-    type: 'hotspot',
-    title: '发现新热点',
-    content: hotspot.title
-  });
-}
+@sio.event
+async def connect(sid, environ):
+    print(f"Client connected: {sid}")
 
-export { app, httpServer, io, notifyNewHotspot };
+@sio.event
+async def subscribe(sid, data):
+    keywords = data.get("keywords", [])
+    for kw in keywords:
+        await sio.enter_room(sid, f"keyword:{kw}")
+
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
+
+async def notify_new_hotspot(hotspot: dict):
+    keyword = hotspot.get("keyword", {}).get("text", "")
+    await sio.emit("hotspot:new", hotspot, room=f"keyword:{keyword}")
+    await sio.emit("notification", {
+        "type": "hotspot",
+        "title": "发现新热点",
+        "content": hotspot.get("title")
+    })
 ```
 
 ### 5.2 路由结构
 
-```typescript
-// routes/keywords.ts
-import { Router } from 'express';
-import { prisma } from '../db';
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-const router = Router();
+router = APIRouter()
 
-router.get('/', async (req, res) => {
-  const keywords = await prisma.keyword.findMany({
-    orderBy: { createdAt: 'desc' }
-  });
-  res.json(keywords);
-});
+async def get_db():
+    async with async_session() as session:
+        yield session
 
-router.post('/', async (req, res) => {
-  const { text, category } = req.body;
-  const keyword = await prisma.keyword.create({
-    data: { text, category }
-  });
-  res.status(201).json(keyword);
-});
+@router.get("/keywords")
+async def get_keywords(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Keyword).order_by(Keyword.created_at.desc()))
+    return result.scalars().all()
 
-router.delete('/:id', async (req, res) => {
-  await prisma.keyword.delete({
-    where: { id: req.params.id }
-  });
-  res.status(204).send();
-});
+@router.post("/keywords")
+async def create_keyword(text: str, category: str | None = None, db: AsyncSession = Depends(get_db)):
+    keyword = Keyword(id=str(uuid.uuid4()), text=text, category=category)
+    db.add(keyword)
+    await db.commit()
+    return keyword
 
-export default router;
+@router.delete("/keywords/{keyword_id}")
+async def delete_keyword(keyword_id: str, db: AsyncSession = Depends(get_db)):
+    keyword = await db.get(Keyword, keyword_id)
+    if not keyword:
+        raise HTTPException(status_code=404, detail="Keyword not found")
+    await db.delete(keyword)
+    await db.commit()
+    return {"status": "ok"}
 ```
 
 ---
 
 ## 6. 定时任务配置
 
-```typescript
-import cron from 'node-cron';
+```python
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-// 每 30 分钟执行一次热点检查
-cron.schedule('*/30 * * * *', async () => {
-  console.log('Running hotspot check...');
-  await checkHotspots();
-});
+scheduler = AsyncIOScheduler()
 
-async function checkHotspots() {
-  const keywords = await prisma.keyword.findMany({
-    where: { isActive: true }
-  });
+@scheduler.scheduled_job("*/30 * * * *")
+async def check_hotspots():
+    print("Running hotspot check...")
 
-  for (const keyword of keywords) {
-    // 1. 从 Twitter 搜索
-    const tweets = await searchTwitter(keyword.text);
-    
-    // 2. 从 Bing 搜索
-    const webResults = await searchBing(keyword.text);
-    
-    // 3. AI 分析
-    for (const item of [...tweets, ...webResults]) {
-      const analysis = await analyzeHotspot(item.content);
-      
-      if (analysis.isReal && analysis.relevance > 60) {
-        // 4. 保存并通知
-        const hotspot = await saveHotspot(item, analysis, keyword);
-        notifyNewHotspot(hotspot);
-      }
-    }
-  }
-}
+    async with async_session() as db:
+        result = await db.execute(select(Keyword).where(Keyword.is_active == True))
+        keywords = result.scalars().all()
+
+    for keyword in keywords:
+        # 1. 从 Twitter 搜索
+        tweets = await search_twitter(keyword.text)
+
+        # 2. 从 Bing 搜索
+        web_results = await search_bing(keyword.text)
+
+        # 3. AI 分析
+        for item in [...tweets, ...web_results]:
+            state = {"content": item["content"], "source": item["source"], "url": item["url"]}
+            result = await app.run(state)  # LangGraph
+
+            if result["analysis"]["isReal"] and result["analysis"]["relevance"] > 60:
+                # 4. 保存并通知
+                hotspot = await save_hotspot(item, result["analysis"], keyword)
+                await notify_new_hotspot(hotspot)
+
+# 启动调度器
+scheduler.start()
 ```
 
 ---
 
 ## 7. 邮件通知配置
 
-```typescript
-import nodemailer from 'nodemailer';
+```python
+import aiosmtplib
+from email.mime.text import MIMEText
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
+async def send_email_notification(hotspot: dict):
+    message = MIMEText(f"""
+        <h2>{hotspot['title']}</h2>
+        <p>{hotspot.get('summary', '')}</p>
+        <p><strong>重要程度:</strong> {hotspot.get('importance', 'low')}</p>
+        <p><strong>相关性:</strong> {hotspot.get('relevance', 0)}%</p>
+        <p><a href="{hotspot['url']}">查看原文</a></p>
+    """, "html")
 
-async function sendEmailNotification(hotspot: Hotspot) {
-  await transporter.sendMail({
-    from: process.env.SMTP_USER,
-    to: process.env.NOTIFY_EMAIL,
-    subject: `🔥 新热点: ${hotspot.title}`,
-    html: `
-      <h2>${hotspot.title}</h2>
-      <p>${hotspot.summary}</p>
-      <p><strong>重要程度:</strong> ${hotspot.importance}</p>
-      <p><strong>相关性:</strong> ${hotspot.relevance}%</p>
-      <p><a href="${hotspot.url}">查看原文</a></p>
-    `
-  });
-}
+    message["From"] = os.getenv("SMTP_USER")
+    message["To"] = os.getenv("NOTIFY_EMAIL")
+    message["Subject"] = f"🔥 新热点: {hotspot['title']}"
+
+    await aiosmtplib.send(
+        message,
+        hostname=os.getenv("SMTP_HOST"),
+        port=int(os.getenv("SMTP_PORT", 587)),
+        username=os.getenv("SMTP_USER"),
+        password=os.getenv("SMTP_PASS"),
+        start_tls=True
+    )
 ```

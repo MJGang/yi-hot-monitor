@@ -100,16 +100,16 @@
 
 ## 5. AI 分析规格
 
-### 5.1 OpenRouter 集成
+### 5.1 LangChain + LangGraph 集成
+
+**LLM 提供商：**
+- DeepSeek
+- MiniMax
 
 **用途：**
 1. **真假识别** - 判断内容是否为假冒/标题党
 2. **热点分析** - 评估热点价值和相关性
 3. **内容摘要** - 生成热点摘要
-
-**模型选择：**
-- 主模型：Claude 或 GPT-4
-- 备用模型：Gemini
 
 **Prompt 设计：**
 ```
@@ -189,9 +189,20 @@ subscribe        # 订阅关键词
 unsubscribe      # 取消订阅
 ```
 
-## 8. 验收标准
+## 8. 技术栈
 
-### 8.1 功能验收
+| 层级 | 技术 |
+|------|------|
+| 前端 | React + Vite + TailwindCSS |
+| 后端 | Python + FastAPI + uv |
+| 数据库 | MySQL + SQLAlchemy | + FastAPI + uv |
+| 数据库 | SQLite + SQLAlchemy |
+| AI | LangChain + LangGraph |
+| LLM | DeepSeek / MiniMax |
+
+## 9. 验收标准
+
+### 9.1 功能验收
 - [ ] 能够添加和管理监控关键词
 - [ ] 能够自动从多数据源抓取热点
 - [ ] AI 能够正确识别假冒内容
@@ -200,12 +211,12 @@ unsubscribe      # 取消订阅
 - [ ] 页面响应式适配正常
 - [ ] UI 风格独特美观
 
-### 8.2 性能验收
+### 9.2 性能验收
 - [ ] 页面加载时间 < 3s
 - [ ] 热点抓取功能稳定
 - [ ] 通知发送及时
 
-### 8.3 Agent Skills 验收
+### 9.3 Agent Skills 验收
 - [ ] 技能文件格式正确
 - [ ] 能够被 AI 正确调用
 - [ ] 返回数据格式规范

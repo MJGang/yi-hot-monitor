@@ -31,20 +31,12 @@
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | 前端 | React + Vite + TailwindCSS | 响应式、赛博朋克风格 UI |
-| 后端 | Node.js + Express | 轻量级 API 服务 |
-| 数据库 | SQLite + Prisma | 轻量存储、ORM |
-| AI 服务 | OpenRouter API | 热点验证、内容分析 |
-| 定时任务 | node-cron | 定时热点抓取 |
+| 后端 | Python + FastAPI + uv | 高性能 API 服务 |
+| 数据库 | MySQL + SQLAlchemy | 关系型数据库、ORM |
+| AI 服务 | LangChain + LangGraph | DeepSeek/MiniMax LLM |
+| 定时任务 | APScheduler | 定时热点抓取 |
 | 实时通信 | Socket.io | 浏览器推送 |
-| 邮件 | Nodemailer | 邮件通知 |
-
-## 📊 数据源
-
-| 来源 | 方式 | 说明 |
-|------|------|------|
-| 网页搜索 | Bing/Google 爬虫 | 无需 API，控制频率 |
-| Twitter/X | twitterapi.io | 官方 API 接口 |
-| 聚合处理 | 多源去重 + AI 分析 | 确保信息质量 |
+| 邮件 | SMTP (aiosmtplib) | 异步邮件通知 |
 
 ## 📁 项目结构
 
@@ -53,20 +45,20 @@ yi-hot-monitor/
 ├── docs/                    # 文档目录
 │   ├── README.md           # 项目说明
 │   ├── REQUIREMENTS.md     # 需求文档
-│   └── API.md              # API 文档
-├── server/                  # 后端服务
-│   ├── src/
-│   │   ├── routes/         # API 路由
+│   └── API_INTEGRATION.md  # API 集成文档
+├── backend/                 # 后端服务 (Python)
+│   ├── app/
+│   │   ├── api/            # API 路由
 │   │   ├── services/       # 业务逻辑
 │   │   │   ├── search/     # 搜索服务
 │   │   │   ├── twitter/    # Twitter 服务
-│   │   │   ├── ai/         # AI 分析服务
+│   │   │   ├── ai/         # AI 分析服务 (LangChain/LangGraph)
 │   │   │   └── notify/     # 通知服务
 │   │   ├── jobs/           # 定时任务
-│   │   ├── db/             # 数据库
+│   │   ├── db/             # 数据库模型
 │   │   └── utils/          # 工具函数
-│   ├── prisma/             # Prisma ORM
-│   └── package.json
+│   ├── pyproject.toml      # uv 项目配置
+│   └── .env.example        # 环境变量模板
 ├── client/                  # 前端应用
 │   ├── src/
 │   │   ├── components/     # UI 组件
@@ -77,14 +69,21 @@ yi-hot-monitor/
 │   └── package.json
 ├── skills/                  # Agent Skills
 │   └── SKILL.md            # 技能描述
-└── .env.example            # 环境变量模板
+└── .env.example            # 环境变量模板 (前端)
 ```
 
 ## ⚙️ 配置说明
 
+### 后端环境变量 (backend/.env)
+
 ```env
-# OpenRouter AI
-OPENROUTER_API_KEY=your_openrouter_key
+# LLM 配置 (必填)
+LLM_PROVIDER=deepseek        # deepseek 或 minimax
+DEEPSEEK_API_KEY=your_deepseek_key
+MINIMAX_API_KEY=your_minimax_key
+
+# 数据库
+DATABASE_URL=mysql+aiomysql://user:password@localhost:3306/hotspot_db
 
 # Twitter API (twitterapi.io)
 TWITTER_API_KEY=your_twitter_api_key
@@ -97,34 +96,58 @@ SMTP_PASS=your_password
 NOTIFY_EMAIL=receive@example.com
 
 # 监控配置
-MONITOR_INTERVAL=1800000  # 30分钟 (毫秒)
+MONITOR_INTERVAL=30         # 分钟
+
+# WebSocket
+WS_PORT=8765
 ```
 
 ## 🚀 快速开始
 
+### 后端 (backend/)
+
+```bash
+# 1. 进入后端目录
+cd backend
+
+# 2. 使用 uv 安装依赖
+uv sync
+
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件填入你的 API Keys
+
+# 4. 启动开发服务器
+uv run uvicorn app.main:app --reload --port 3001
+```
+
+### 前端 (client/)
+
 ```bash
 # 1. 安装依赖
-cd server && npm install
 cd client && npm install
 
 # 2. 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件填入你的 API Keys
 
-# 3. 初始化数据库
-cd server && npx prisma migrate dev
+# 3. 启动开发服务器
+npm run dev
+```
 
-# 4. 启动服务
-cd server && npm run dev
-cd client && npm run dev
+### 数据库
+
+```bash
+cd backend
+uv run alembic upgrade head    # 运行数据库迁移
+uv run python -m app.db.init   # 初始化数据
 ```
 
 ## 📝 开发日志
 
 - [ ] 项目初始化
-- [ ] 后端 API 开发
+- [ ] 后端架构设计 (Python + FastAPI)
 - [ ] 数据源对接
-- [ ] AI 集成 (OpenRouter)
+- [ ] AI 集成 (LangChain/LangGraph)
 - [ ] 前端页面开发
 - [ ] 通知系统开发
 - [ ] 测试与验收
