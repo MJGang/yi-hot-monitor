@@ -202,9 +202,9 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
 
         {/* Author info */}
         <div className="flex items-center gap-2 mt-3">
-          {hotspot.authorAvatar?.startsWith('http') ? (
+          {hotspot.authorAvatar?.startsWith('http') || hotspot.authorAvatar?.startsWith('//') ? (
             <img
-              src={hotspot.authorAvatar}
+              src={hotspot.authorAvatar?.startsWith('//') ? 'https:' + hotspot.authorAvatar : hotspot.authorAvatar}
               alt={hotspot.author}
               className="w-6 h-6 rounded-full shrink-0 object-cover"
             />
