@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { Settings as SettingsIcon, Bell, Radar, Key, Eye, Sun, Moon, Monitor } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Settings as SettingsIcon, Bell, Radar, Key, Eye, Sun, Moon, Monitor, Loader2, Check, X } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useTheme } from '../hooks/useTheme'
+import { useTheme } from '@/hooks/useTheme'
+import { getSettings, updateSettings, type Settings } from '@/lib/api'
 
 const IconX = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -17,11 +18,87 @@ const IconBing = () => (
 
 export default function Settings() {
   const { theme, setTheme } = useTheme()
-  const [browserNotify, setBrowserNotify] = useState(true)
-  const [emailNotify, setEmailNotify] = useState(true)
-  const [quietHours, setQuietHours] = useState(false)
-  const [autoScan, setAutoScan] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [showApiKey, setShowApiKey] = useState(false)
+
+  // 表单状态
+  const [browserNotify, setBrowserNotify] = useState(true)
+  const [emailNotify, setEmailNotify] = useState(false)
+  const [notifyEmail, setNotifyEmail] = useState('')
+  const [notifyFrequency, setNotifyFrequency] = useState<'realtime' | 'hourly' | 'daily' | 'disabled'>('realtime')
+  const [quietHours, setQuietHours] = useState(false)
+  const [quietHoursStart, setQuietHoursStart] = useState('22:00')
+  const [quietHoursEnd, setQuietHoursEnd] = useState('08:00')
+  const [autoScan, setAutoScan] = useState(true)
+  const [scanInterval, setScanInterval] = useState(30)
+  const [dataSourcesX, setDataSourcesX] = useState(true)
+  const [dataSourcesBing, setDataSourcesBing] = useState(true)
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('')
+  const [twitterApiKey, setTwitterApiKey] = useState('')
+
+  // 获取设置
+  const fetchSettings = useCallback(async () => {
+    try {
+      setError(null)
+      const data = await getSettings()
+      // 填充表单
+      setBrowserNotify(data.browserNotify)
+      setEmailNotify(data.emailNotify)
+      setNotifyEmail(data.notifyEmail)
+      setNotifyFrequency(data.notifyFrequency as 'realtime' | 'hourly' | 'daily' | 'disabled')
+      setQuietHours(data.quietHoursEnabled)
+      setQuietHoursStart(data.quietHoursStart)
+      setQuietHoursEnd(data.quietHoursEnd)
+      setAutoScan(data.autoScan)
+      setScanInterval(data.scanInterval)
+      setDataSourcesX(data.dataSources?.x ?? true)
+      setDataSourcesBing(data.dataSources?.bing ?? true)
+      setOpenrouterApiKey(data.openrouterApiKey)
+      setTwitterApiKey(data.twitterApiKey)
+    } catch (err) {
+      setError('获取设置失败')
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSettings()
+  }, [fetchSettings])
+
+  // 保存设置
+  const handleSave = async () => {
+    setSaving(true)
+    setSuccess(null)
+    try {
+      await updateSettings({
+        theme,
+        browserNotify,
+        emailNotify,
+        notifyEmail,
+        notifyFrequency,
+        quietHoursEnabled: quietHours,
+        quietHoursStart,
+        quietHoursEnd,
+        autoScan,
+        scanInterval,
+        dataSources: { x: dataSourcesX, bing: dataSourcesBing },
+        openrouterApiKey,
+        twitterApiKey,
+      })
+      setSuccess('设置已保存')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      setError('保存失败')
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const themeOptions = [
     { value: 'light', label: '浅色', icon: Sun },
@@ -29,16 +106,47 @@ export default function Settings() {
     { value: 'system', label: '跟随系统', icon: Monitor },
   ] as const
 
+  if (loading) {
+    return (
+      <>
+        <div className="liquid-glass flex items-center px-6 py-4" style={{ borderRadius: '0', borderBottom: '0.5px solid rgba(255,255,255,0.4)' }}>
+          <h2 className="font-display text-xl flex items-center gap-3">
+            <span className="icon-pill w-12 h-12 rounded-2xl flex items-center justify-center">
+              <SettingsIcon className="w-6 h-6 text-coral-dark" />
+            </span>
+            <span className="text-text-primary font-semibold">系统设置</span>
+          </h2>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       {/* Toolbar */}
-      <div className="liquid-glass flex items-center px-6 py-4" style={{ borderRadius: '0', borderBottom: '0.5px solid rgba(255,255,255,0.4)' }}>
+      <div className="liquid-glass flex items-center justify-between px-6 py-4" style={{ borderRadius: '0', borderBottom: '0.5px solid rgba(255,255,255,0.4)' }}>
         <h2 className="font-display text-xl flex items-center gap-3">
           <span className="icon-pill w-12 h-12 rounded-2xl flex items-center justify-center">
             <SettingsIcon className="w-6 h-6 text-coral-dark" />
           </span>
           <span className="text-text-primary font-semibold">系统设置</span>
         </h2>
+        {saving && <Loader2 className="w-5 h-5 animate-spin text-primary" />}
+        {success && (
+          <div className="flex items-center gap-2 text-sm text-mint">
+            <Check className="w-4 h-4" />
+            {success}
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-danger">
+            <X className="w-4 h-4" />
+            {error}
+          </div>
+        )}
       </div>
 
       {/* Settings Content */}
@@ -61,7 +169,10 @@ export default function Settings() {
               {themeOptions.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
-                  onClick={() => setTheme(value)}
+                  onClick={() => {
+                    setTheme(value)
+                    handleSave()
+                  }}
                   className={clsx(
                     'flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl transition-all cursor-pointer',
                     theme === value
@@ -91,7 +202,13 @@ export default function Settings() {
                 <div className="font-semibold text-text-primary">浏览器通知</div>
                 <div className="text-text-secondary text-sm">接收到热点时弹出浏览器通知</div>
               </div>
-              <div className={clsx('toggle-switch', browserNotify && 'active')} onClick={() => setBrowserNotify(!browserNotify)} />
+              <div
+                className={clsx('toggle-switch', browserNotify && 'active')}
+                onClick={() => {
+                  setBrowserNotify(!browserNotify)
+                  handleSave()
+                }}
+              />
             </div>
 
             {/* Email Notification */}
@@ -100,7 +217,13 @@ export default function Settings() {
                 <div className="font-semibold text-text-primary">邮件通知</div>
                 <div className="text-text-secondary text-sm">接收热点邮件通知</div>
               </div>
-              <div className={clsx('toggle-switch', emailNotify && 'active')} onClick={() => setEmailNotify(!emailNotify)} />
+              <div
+                className={clsx('toggle-switch', emailNotify && 'active')}
+                onClick={() => {
+                  setEmailNotify(!emailNotify)
+                  handleSave()
+                }}
+              />
             </div>
 
             {/* Email Address */}
@@ -108,7 +231,9 @@ export default function Settings() {
               <div className="font-semibold text-text-primary mb-2">接收邮箱</div>
               <input
                 type="email"
-                defaultValue="user@example.com"
+                value={notifyEmail}
+                onChange={(e) => setNotifyEmail(e.target.value)}
+                onBlur={handleSave}
                 className="glass-input w-full px-4 py-3 rounded-2xl text-text-primary"
                 placeholder="输入邮箱地址"
               />
@@ -117,7 +242,14 @@ export default function Settings() {
             {/* Notification Frequency */}
             <div className="p-5" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.3)' }}>
               <div className="font-semibold text-text-primary mb-2">通知频率</div>
-              <select className="glass-select w-full px-4 py-3 rounded-2xl text-text-primary cursor-pointer">
+              <select
+                value={notifyFrequency}
+                onChange={(e) => {
+                  setNotifyFrequency(e.target.value as 'realtime' | 'hourly' | 'daily' | 'disabled')
+                  handleSave()
+                }}
+                className="glass-select w-full px-4 py-3 rounded-2xl text-text-primary cursor-pointer"
+              >
                 <option value="realtime">实时通知</option>
                 <option value="hourly">每小时汇总</option>
                 <option value="daily">每日汇总</option>
@@ -132,13 +264,31 @@ export default function Settings() {
                   <div className="font-semibold text-text-primary">静默时段</div>
                   <div className="text-text-secondary text-sm">在指定时间段内不发送通知</div>
                 </div>
-                <div className={clsx('toggle-switch', quietHours && 'active')} onClick={() => setQuietHours(!quietHours)} />
+                <div
+                  className={clsx('toggle-switch', quietHours && 'active')}
+                  onClick={() => {
+                    setQuietHours(!quietHours)
+                    handleSave()
+                  }}
+                />
               </div>
               {quietHours && (
                 <div className="flex items-center gap-3 mt-3">
-                  <input type="time" defaultValue="22:00" className="glass-input flex-1 px-4 py-2.5 rounded-2xl text-text-primary" />
+                  <input
+                    type="time"
+                    value={quietHoursStart}
+                    onChange={(e) => setQuietHoursStart(e.target.value)}
+                    onBlur={handleSave}
+                    className="glass-input flex-1 px-4 py-2.5 rounded-2xl text-text-primary"
+                  />
                   <span className="text-text-muted">至</span>
-                  <input type="time" defaultValue="08:00" className="glass-input flex-1 px-4 py-2.5 rounded-2xl text-text-primary" />
+                  <input
+                    type="time"
+                    value={quietHoursEnd}
+                    onChange={(e) => setQuietHoursEnd(e.target.value)}
+                    onBlur={handleSave}
+                    className="glass-input flex-1 px-4 py-2.5 rounded-2xl text-text-primary"
+                  />
                 </div>
               )}
             </div>
@@ -157,11 +307,18 @@ export default function Settings() {
             {/* Scan Interval */}
             <div className="p-5" style={{ borderBottom: '0.5px solid rgba(255,255,255,0.3)' }}>
               <div className="font-semibold text-text-primary mb-2">扫描间隔</div>
-              <select className="glass-select w-full px-4 py-3 rounded-2xl text-text-primary cursor-pointer">
-                <option value="15">每 15 分钟</option>
-                <option value="30" selected>每 30 分钟</option>
-                <option value="60">每 1 小时</option>
-                <option value="120">每 2 小时</option>
+              <select
+                value={scanInterval}
+                onChange={(e) => {
+                  setScanInterval(Number(e.target.value))
+                  handleSave()
+                }}
+                className="glass-select w-full px-4 py-3 rounded-2xl text-text-primary cursor-pointer"
+              >
+                <option value={15}>每 15 分钟</option>
+                <option value={30}>每 30 分钟</option>
+                <option value={60}>每 1 小时</option>
+                <option value={120}>每 2 小时</option>
               </select>
             </div>
 
@@ -170,14 +327,32 @@ export default function Settings() {
               <div className="font-semibold text-text-primary mb-3">数据源</div>
               <div className="space-y-3">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="w-5 h-5 rounded" style={{ accentColor: '#7DCTAA' }} />
+                  <input
+                    type="checkbox"
+                    checked={dataSourcesX}
+                    onChange={() => {
+                      setDataSourcesX(!dataSourcesX)
+                      handleSave()
+                    }}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: '#7DCTAA' }}
+                  />
                   <span className="flex items-center gap-2">
                     <IconX />
                     <span className="text-text-primary">X (Twitter)</span>
                   </span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="w-5 h-5 rounded" style={{ accentColor: '#7DCTAA' }} />
+                  <input
+                    type="checkbox"
+                    checked={dataSourcesBing}
+                    onChange={() => {
+                      setDataSourcesBing(!dataSourcesBing)
+                      handleSave()
+                    }}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: '#7DCTAA' }}
+                  />
                   <span className="flex items-center gap-2">
                     <IconBing />
                     <span className="text-text-primary">Bing 搜索</span>
@@ -192,7 +367,13 @@ export default function Settings() {
                 <div className="font-semibold text-text-primary">自动扫描</div>
                 <div className="text-text-secondary text-sm">按设定间隔自动扫描新热点</div>
               </div>
-              <div className={clsx('toggle-switch', autoScan && 'active')} onClick={() => setAutoScan(!autoScan)} />
+              <div
+                className={clsx('toggle-switch', autoScan && 'active')}
+                onClick={() => {
+                  setAutoScan(!autoScan)
+                  handleSave()
+                }}
+              />
             </div>
 
           </div>
@@ -212,8 +393,11 @@ export default function Settings() {
               <div className="relative">
                 <input
                   type={showApiKey ? 'text' : 'password'}
-                  defaultValue="sk-or-v1-xxxxx...xxxxx"
+                  value={openrouterApiKey}
+                  onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                  onBlur={handleSave}
                   className="glass-input w-full px-4 py-3 pr-10 rounded-2xl text-text-primary font-mono text-sm"
+                  placeholder="输入 OpenRouter API Key"
                 />
                 <button
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary cursor-pointer"
@@ -229,6 +413,9 @@ export default function Settings() {
               <div className="font-semibold text-text-primary mb-2">Twitter API Key (可选)</div>
               <input
                 type="password"
+                value={twitterApiKey}
+                onChange={(e) => setTwitterApiKey(e.target.value)}
+                onBlur={handleSave}
                 placeholder="输入 Twitter API Key"
                 className="glass-input w-full px-4 py-3 rounded-2xl text-text-primary placeholder-text-muted font-mono text-sm"
               />

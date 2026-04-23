@@ -1,26 +1,7 @@
-import { useState } from 'react'
-import { Tag as KeywordIcon, Search, Plus, Edit2, Trash2, Cpu, Sparkles, Brain, Bot, Layers, Gem, Car, GraduationCap } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Tag as KeywordIcon, Search, Plus, Edit2, Trash2, Cpu, Sparkles, Brain, Bot, Layers, Gem, Car, GraduationCap, Loader2, X } from 'lucide-react'
 import { clsx } from 'clsx'
-
-interface Keyword {
-  id: number
-  name: string
-  icon: 'cpu' | 'sparkles' | 'brain' | 'bot' | 'layers' | 'gem' | 'car' | 'graduation'
-  hotspotCount: number
-  active: boolean
-  borderColor: string
-}
-
-const keywords: Keyword[] = [
-  { id: 1, name: 'AI 大模型', icon: 'cpu', hotspotCount: 23, active: true, borderColor: 'rgba(125, 205, 170, 0.3)' },
-  { id: 2, name: 'GPT-5', icon: 'sparkles', hotspotCount: 12, active: true, borderColor: 'rgba(201, 177, 255, 0.3)' },
-  { id: 3, name: 'Claude 3.5', icon: 'brain', hotspotCount: 8, active: true, borderColor: 'rgba(116, 185, 255, 0.3)' },
-  { id: 4, name: 'AI Agent', icon: 'bot', hotspotCount: 15, active: true, borderColor: 'rgba(255, 153, 200, 0.3)' },
-  { id: 5, name: 'Llama 3', icon: 'layers', hotspotCount: 6, active: true, borderColor: 'rgba(255, 217, 61, 0.3)' },
-  { id: 6, name: 'Gemini 2.0', icon: 'gem', hotspotCount: 4, active: true, borderColor: 'rgba(255, 138, 128, 0.3)' },
-  { id: 7, name: '自动驾驶', icon: 'car', hotspotCount: 5, active: false, borderColor: 'rgba(160, 174, 192, 0.3)' },
-  { id: 8, name: '机器学习', icon: 'graduation', hotspotCount: 3, active: false, borderColor: 'rgba(160, 174, 192, 0.3)' }
-]
+import { getKeywords, createKeyword, deleteKeyword, toggleKeyword, type Keyword } from '@/lib/api'
 
 const iconMap = {
   cpu: Cpu,
@@ -33,37 +14,129 @@ const iconMap = {
   graduation: GraduationCap
 }
 
+interface KeywordCardProps {
+  keyword: Keyword
+  onToggle: (id: string) => void
+  onDelete: (id: string) => void
+}
+
+function KeywordCard({ keyword, onToggle, onDelete }: KeywordCardProps) {
+  const Icon = iconMap[keyword.icon] || Sparkles
+
+  return (
+    <div
+      className={clsx('liquid-card rounded-2xl p-5 card-hover cursor-pointer', !keyword.isActive && 'opacity-50')}
+      style={{ borderColor: getBorderColor(keyword.icon) }}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <span className="icon-pill w-10 h-10 rounded-xl flex items-center justify-center">
+            <Icon className="w-5 h-5 text-mint-dark" />
+          </span>
+          <span className="font-semibold text-text-primary">{keyword.text}</span>
+        </div>
+        <div
+          className={clsx('toggle-switch', keyword.isActive && 'active')}
+          onClick={() => onToggle(keyword.id)}
+        />
+      </div>
+      <div className="text-text-secondary text-sm mb-4">
+        {keyword.isActive ? '监控中' : '已暂停'} · {keyword.hotspotCount} 条热点
+      </div>
+      <div className="flex gap-2">
+        <button
+          className="glass-btn p-2 rounded-xl cursor-pointer"
+          onClick={() => {/* TODO: 编辑功能 */}}
+        >
+          <Edit2 className="w-4 h-4 text-lavender-dark" />
+        </button>
+        <button
+          className="glass-btn p-2 rounded-xl cursor-pointer"
+          onClick={() => onDelete(keyword.id)}
+        >
+          <Trash2 className="w-4 h-4 text-coral-dark" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function getBorderColor(icon: string): string {
+  const colors: Record<string, string> = {
+    cpu: 'rgba(125, 205, 170, 0.3)',
+    sparkles: 'rgba(201, 177, 255, 0.3)',
+    brain: 'rgba(116, 185, 255, 0.3)',
+    bot: 'rgba(255, 153, 200, 0.3)',
+    layers: 'rgba(255, 217, 61, 0.3)',
+    gem: 'rgba(255, 138, 128, 0.3)',
+    car: 'rgba(160, 174, 192, 0.3)',
+    graduation: 'rgba(160, 174, 192, 0.3)'
+  }
+  return colors[icon] || 'rgba(125, 205, 170, 0.3)'
+}
+
 export default function Keywords() {
-  const [keywordList, setKeywordList] = useState(keywords)
+  const [keywordList, setKeywordList] = useState<Keyword[]>([])
   const [newKeyword, setNewKeyword] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const toggleKeyword = (id: number) => {
-    setKeywordList(keywords =>
-      keywords.map(k =>
-        k.id === id ? { ...k, active: !k.active } : k
-      )
-    )
-  }
+  // 获取关键词列表
+  const fetchKeywords = useCallback(async () => {
+    try {
+      setError(null)
+      const response = await getKeywords()
+      setKeywordList(response.data)
+    } catch (err) {
+      setError('获取关键词失败')
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const addKeyword = () => {
+  useEffect(() => {
+    fetchKeywords()
+  }, [fetchKeywords])
+
+  // 添加关键词
+  const handleAddKeyword = async () => {
     if (!newKeyword.trim()) return
-    const newId = Math.max(...keywordList.map(k => k.id)) + 1
-    setKeywordList([
-      ...keywordList,
-      {
-        id: newId,
-        name: newKeyword,
-        icon: 'cpu',
-        hotspotCount: 0,
-        active: true,
-        borderColor: 'rgba(125, 205, 170, 0.3)'
-      }
-    ])
-    setNewKeyword('')
+
+    setSubmitting(true)
+    try {
+      const created = await createKeyword(newKeyword.trim())
+      setKeywordList(prev => [created, ...prev])
+      setNewKeyword('')
+    } catch (err) {
+      console.error('添加关键词失败', err)
+      setError('添加失败')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const deleteKeyword = (id: number) => {
-    setKeywordList(keywordList.filter(k => k.id !== id))
+  // 切换关键词状态
+  const handleToggle = async (id: string) => {
+    try {
+      const updated = await toggleKeyword(id)
+      setKeywordList(prev =>
+        prev.map(k => k.id === id ? updated : k)
+      )
+    } catch (err) {
+      console.error('切换状态失败', err)
+    }
+  }
+
+  // 删除关键词
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteKeyword(id)
+      setKeywordList(prev => prev.filter(k => k.id !== id))
+    } catch (err) {
+      console.error('删除失败', err)
+    }
   }
 
   return (
@@ -89,18 +162,24 @@ export default function Keywords() {
               type="text"
               value={newKeyword}
               onChange={(e) => setNewKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addKeyword()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
               placeholder="输入关键词，如: GPT-5, Claude, AI Agent..."
               className="glass-input w-full px-5 py-4 pl-12 rounded-2xl text-text-primary placeholder-text-muted font-medium"
+              disabled={submitting}
             />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
           </div>
           <button
-            onClick={addKeyword}
-            className="glass-btn-primary px-6 py-4 rounded-2xl text-text-primary font-semibold flex items-center gap-2"
+            onClick={handleAddKeyword}
+            disabled={submitting || !newKeyword.trim()}
+            className="glass-btn-primary px-6 py-4 rounded-2xl text-text-primary font-semibold flex items-center gap-2 disabled:opacity-50"
             style={{ borderRadius: '20px' }}
           >
-            <Plus className="w-5 h-5" />
+            {submitting ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Plus className="w-5 h-5" />
+            )}
             添加
           </button>
         </div>
@@ -108,43 +187,43 @@ export default function Keywords() {
 
       {/* Keywords Grid */}
       <div className="flex-1 overflow-y-auto p-6 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 content-start">
-        {keywordList.map((keyword) => {
-          const Icon = iconMap[keyword.icon]
-          return (
-            <div
-              key={keyword.id}
-              className={clsx('liquid-card rounded-2xl p-5 card-hover cursor-pointer', !keyword.active && 'opacity-50')}
-              style={{ borderColor: keyword.borderColor }}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <span className="icon-pill w-10 h-10 rounded-xl flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-mint-dark" />
-                  </span>
-                  <span className="font-semibold text-text-primary">{keyword.name}</span>
-                </div>
-                <div
-                  className={clsx('toggle-switch', keyword.active && 'active')}
-                  onClick={() => toggleKeyword(keyword.id)}
-                />
-              </div>
-              <div className="text-text-secondary text-sm mb-4">
-                {keyword.active ? '监控中' : '已暂停'} · {keyword.hotspotCount} 条热点
-              </div>
-              <div className="flex gap-2">
-                <button className="glass-btn p-2 rounded-xl cursor-pointer">
-                  <Edit2 className="w-4 h-4 text-lavender-dark" />
-                </button>
-                <button
-                  className="glass-btn p-2 rounded-xl cursor-pointer"
-                  onClick={() => deleteKeyword(keyword.id)}
-                >
-                  <Trash2 className="w-4 h-4 text-coral-dark" />
-                </button>
-              </div>
+        {loading ? (
+          <div className="col-span-full flex items-center justify-center py-16">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <span className="ml-2 text-text-muted">加载中...</span>
+          </div>
+        ) : error && keywordList.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-full bg-danger/10 flex items-center justify-center mb-4">
+              <X className="w-8 h-8 text-danger" />
             </div>
-          )
-        })}
+            <h3 className="text-lg font-semibold text-text-primary mb-2">加载失败</h3>
+            <p className="text-sm text-text-muted mb-4">{error}</p>
+            <button
+              onClick={fetchKeywords}
+              className="px-4 py-2 rounded-xl bg-primary/20 text-primary text-sm font-medium hover:bg-primary/30 transition-colors cursor-pointer"
+            >
+              重试
+            </button>
+          </div>
+        ) : keywordList.length > 0 ? (
+          keywordList.map((keyword) => (
+            <KeywordCard
+              key={keyword.id}
+              keyword={keyword}
+              onToggle={handleToggle}
+              onDelete={handleDelete}
+            />
+          ))
+        ) : (
+          <div className="col-span-full flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
+              <KeywordIcon className="w-8 h-8 text-text-muted" />
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">暂无关键词</h3>
+            <p className="text-sm text-text-muted mb-4">添加关键词开始监控热点</p>
+          </div>
+        )}
       </div>
     </>
   )

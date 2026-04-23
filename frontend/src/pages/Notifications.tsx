@@ -1,75 +1,7 @@
-import { Bell, Trash2, CheckCircle, Zap, CircleDot, Flame } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Bell, Trash2, CheckCircle, Zap, CircleDot, Flame, Loader2, X } from 'lucide-react'
 import { clsx } from 'clsx'
-
-interface Notification {
-  id: number
-  title: string
-  type: 'browser' | 'email'
-  priority: 'urgent' | 'high' | 'medium' | 'low'
-  credibility: number
-  isReal: boolean
-  time: string
-  source: string
-  icon: 'flame' | 'zap' | 'alert' | 'circle' | 'check'
-}
-
-const notifications: Notification[] = [
-  {
-    id: 1,
-    title: 'GPT-5 即将发布？OpenAI CEO 暗示重大更新',
-    type: 'browser',
-    priority: 'urgent',
-    credibility: 92,
-    isReal: true,
-    time: '10分钟前',
-    source: 'X @OpenAI',
-    icon: 'flame'
-  },
-  {
-    id: 2,
-    title: 'Claude 3.5 发布：超越 GPT-4 的推理能力',
-    type: 'email',
-    priority: 'high',
-    credibility: 95,
-    isReal: true,
-    time: '25分钟前',
-    source: 'Bing',
-    icon: 'zap'
-  },
-  {
-    id: 3,
-    title: '某公司宣称突破性 AI 技术被指虚假宣传',
-    type: 'browser',
-    priority: 'high',
-    credibility: 23,
-    isReal: false,
-    time: '32分钟前',
-    source: 'X @TechCrunch',
-    icon: 'alert'
-  },
-  {
-    id: 4,
-    title: 'Google Gemini 2.0 路线图泄露，更多能力即将到来',
-    type: 'email',
-    priority: 'medium',
-    credibility: 78,
-    isReal: true,
-    time: '1小时前',
-    source: 'Bing',
-    icon: 'circle'
-  },
-  {
-    id: 5,
-    title: 'Meta 发布开源 AI 助手，支持 100+ 语言',
-    type: 'browser',
-    priority: 'low',
-    credibility: 85,
-    isReal: true,
-    time: '2小时前',
-    source: 'X @MetaAI',
-    icon: 'check'
-  }
-]
+import { getNotifications, deleteNotification, clearNotifications, type Notification } from '@/lib/api'
 
 const priorityConfig = {
   urgent: { icon: Flame, badge: 'badge-urgent', color: '#E57373', bg: 'linear-gradient(135deg, rgba(255,138,128,0.5), rgba(255,153,200,0.5))' },
@@ -80,7 +12,102 @@ const priorityConfig = {
 
 const priorityLabels = { urgent: '紧急', high: '高优', medium: '中等', low: '低' }
 
+interface NotificationItemProps {
+  notification: Notification
+  onDelete: (id: string) => void
+}
+
+function NotificationItem({ notification, onDelete }: NotificationItemProps) {
+  const config = priorityConfig[notification.priority] || priorityConfig.medium
+  const Icon = config.icon
+
+  return (
+    <div
+      className="liquid-card rounded-2xl p-5 card-hover"
+      style={{ borderColor: notification.isReal ? 'rgba(0,184,148,0.3)' : 'rgba(225,112,85,0.3)' }}
+    >
+      <div className="flex items-start gap-4">
+        <span
+          className="icon-pill w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+          style={{ background: config.bg }}
+        >
+          <Icon className="w-5 h-5" style={{ color: config.color }} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className={clsx('px-3 py-1 text-xs font-semibold rounded-full text-white', config.badge)}>
+              {priorityLabels[notification.priority] || '中等'}
+            </span>
+            <span
+              className="px-3 py-1 text-xs font-semibold rounded-full"
+              style={{ background: notification.type === 'browser' ? 'rgba(116,185,255,0.2)' : 'rgba(125,205,170,0.2)', color: notification.type === 'browser' ? '#74B9FF' : '#5FB88F' }}
+            >
+              {notification.type === 'browser' ? '浏览器' : '邮件'}
+            </span>
+            <span className="text-text-muted text-sm ml-auto">{notification.time}</span>
+          </div>
+          <h4 className="font-semibold text-text-primary mb-1">{notification.title}</h4>
+          <p className="text-text-secondary text-sm">
+            AI分析: {notification.isReal ? '真实' : '假冒'} (置信度 {notification.credibility}%) · 来源: {notification.source}
+          </p>
+        </div>
+        <button
+          onClick={() => onDelete(notification.id)}
+          className="glass-btn p-2 rounded-xl text-text-muted hover:text-text-primary cursor-pointer"
+        >
+          <span className="text-xl">×</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Notifications() {
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [filterType, setFilterType] = useState<'all' | 'browser' | 'email'>('all')
+
+  // 获取通知列表
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setError(null)
+      const response = await getNotifications({ type: filterType })
+      setNotifications(response.data)
+    } catch (err) {
+      setError('获取通知失败')
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [filterType])
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [fetchNotifications])
+
+  // 删除单条通知
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteNotification(id)
+      setNotifications(prev => prev.filter(n => n.id !== id))
+    } catch (err) {
+      console.error('删除失败', err)
+    }
+  }
+
+  // 清空所有通知
+  const handleClearAll = async () => {
+    if (!confirm('确定要清空所有通知吗？')) return
+
+    try {
+      await clearNotifications()
+      setNotifications([])
+    } catch (err) {
+      console.error('清空失败', err)
+    }
+  }
+
   return (
     <>
       {/* Toolbar */}
@@ -92,12 +119,20 @@ export default function Notifications() {
           <span className="text-text-primary font-semibold">通知记录</span>
         </h2>
         <div className="flex items-center gap-3">
-          <select className="glass-select px-4 py-2.5 rounded-2xl text-text-primary text-sm cursor-pointer">
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as 'all' | 'browser' | 'email')}
+            className="glass-select px-4 py-2.5 rounded-2xl text-text-primary text-sm cursor-pointer"
+          >
             <option value="all">全部类型</option>
             <option value="browser">浏览器</option>
             <option value="email">邮件</option>
           </select>
-          <button className="glass-btn px-4 py-2.5 rounded-2xl text-danger text-sm font-semibold flex items-center gap-2">
+          <button
+            onClick={handleClearAll}
+            disabled={notifications.length === 0}
+            className="glass-btn px-4 py-2.5 rounded-2xl text-danger text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+          >
             <Trash2 className="w-4 h-4" />
             清空记录
           </button>
@@ -106,47 +141,42 @@ export default function Notifications() {
 
       {/* Notifications List */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {notifications.map((notification) => {
-          const config = priorityConfig[notification.priority]
-          const Icon = config.icon
-          return (
-            <div
-              key={notification.id}
-              className="liquid-card rounded-2xl p-5 card-hover"
-              style={{ borderColor: notification.isReal ? 'rgba(0,184,148,0.3)' : 'rgba(225,112,85,0.3)' }}
-            >
-              <div className="flex items-start gap-4">
-                <span
-                  className="icon-pill w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: config.bg }}
-                >
-                  <Icon className="w-5 h-5" style={{ color: config.color }} />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={clsx('px-3 py-1 text-xs font-semibold rounded-full text-white', config.badge)}>
-                      {priorityLabels[notification.priority]}
-                    </span>
-                    <span
-                      className="px-3 py-1 text-xs font-semibold rounded-full"
-                      style={{ background: notification.type === 'browser' ? 'rgba(116,185,255,0.2)' : 'rgba(125,205,170,0.2)', color: notification.type === 'browser' ? '#74B9FF' : '#5FB88F' }}
-                    >
-                      {notification.type === 'browser' ? '浏览器' : '邮件'}
-                    </span>
-                    <span className="text-text-muted text-sm ml-auto">{notification.time}</span>
-                  </div>
-                  <h4 className="font-semibold text-text-primary mb-1">{notification.title}</h4>
-                  <p className="text-text-secondary text-sm">
-                    AI分析: {notification.isReal ? '真实' : '假冒'} (置信度 {notification.credibility}%) · 来源: {notification.source}
-                  </p>
-                </div>
-                <button className="glass-btn p-2 rounded-xl text-text-muted hover:text-text-primary cursor-pointer">
-                  <span className="text-xl">×</span>
-                </button>
-              </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <span className="ml-2 text-text-muted">加载中...</span>
+          </div>
+        ) : error && notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-full bg-danger/10 flex items-center justify-center mb-4">
+              <X className="w-8 h-8 text-danger" />
             </div>
-          )
-        })}
+            <h3 className="text-lg font-semibold text-text-primary mb-2">加载失败</h3>
+            <p className="text-sm text-text-muted mb-4">{error}</p>
+            <button
+              onClick={fetchNotifications}
+              className="px-4 py-2 rounded-xl bg-primary/20 text-primary text-sm font-medium hover:bg-primary/30 transition-colors cursor-pointer"
+            >
+              重试
+            </button>
+          </div>
+        ) : notifications.length > 0 ? (
+          notifications.map((notification) => (
+            <NotificationItem
+              key={notification.id}
+              notification={notification}
+              onDelete={handleDelete}
+            />
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
+              <Bell className="w-8 h-8 text-text-muted" />
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">暂无通知</h3>
+            <p className="text-sm text-text-muted">发现热点时会发送通知</p>
+          </div>
+        )}
       </div>
     </>
   )
