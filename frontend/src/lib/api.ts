@@ -27,6 +27,7 @@ export interface Hotspot {
   summary: string | null
   aiReason: string | null
   originalText: string | null
+  url: string | null
   matchedKeywords: string[]
   sourceType: 'x' | 'bing'
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Radar, ChevronDown, Loader2, Repeat, MessageCircle, Heart, Eye, BadgeCheck, Clock, ShieldCheck, ShieldAlert, ShieldX, Shield, Flame, Thermometer, Zap, Leaf, Snowflake, Filter, X, Check, Download, Tag, Bookmark } from 'lucide-react'
+import { Search, Radar, ChevronDown, Loader2, Repeat, MessageCircle, Heart, Eye, BadgeCheck, Clock, ShieldCheck, ShieldAlert, ShieldX, Shield, Flame, Thermometer, Zap, Leaf, Snowflake, Filter, X, Check, Download, Tag, Bookmark, ExternalLink } from 'lucide-react'
 import { clsx } from 'clsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ParticleField } from '@/components/ui/Particle'
@@ -121,7 +121,9 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
   const HotnessIcon = hotness.icon
   const credibility = credibilityLevels[getCredibilityLevel(hotspot.credibility)]
   const CredibilityIcon = credibility.icon
-  const avatarColor = avatarColors[hotspot.authorAvatar] || 'linear-gradient(135deg, #888, #666)'
+  const avatarColor = hotspot.authorAvatar && !hotspot.authorAvatar.startsWith('http')
+    ? avatarColors[hotspot.authorAvatar] || 'linear-gradient(135deg, #888, #666)'
+    : 'linear-gradient(135deg, #888, #666)'
 
   return (
     <GlareCard className="px-0 pt-0">
@@ -180,9 +182,17 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
 
         {/* Author info */}
         <div className="flex items-center gap-2 mt-3">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: avatarColor }}>
-            {hotspot.authorAvatar || 'UN'}
-          </div>
+          {hotspot.authorAvatar?.startsWith('http') ? (
+            <img
+              src={hotspot.authorAvatar}
+              alt={hotspot.author}
+              className="w-6 h-6 rounded-full shrink-0 object-cover"
+            />
+          ) : (
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: avatarColor }}>
+              {hotspot.authorAvatar || 'UN'}
+            </div>
+          )}
           <div className="flex items-center gap-1">
             <span className="text-xs text-text-secondary">{hotspot.author}</span>
             {hotspot.isVerified && <BadgeCheck className="w-4 h-4 text-sky shrink-0" />}
@@ -221,6 +231,18 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
             <Eye className="w-3.5 h-3.5" />
             <span>{formatNumber(hotspot.stats?.views || 0)}</span>
           </div>
+          {hotspot.url && (
+            <a
+              href={hotspot.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 ml-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>原文</span>
+            </a>
+          )}
         </div>
       </div>
 

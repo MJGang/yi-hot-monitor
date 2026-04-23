@@ -65,7 +65,12 @@ def hotspot_to_response(hotspot: Hotspot, keyword_text: str = None) -> HotspotRe
         originalText=hotspot.content[:200] if hotspot.content else None,
         url=hotspot.url,
         matchedKeywords=[keyword_text] if keyword_text else [],
-        sourceType="x" if hotspot.source == "twitter" else "bing"
+        sourceType={
+                "twitter": "x",
+                "weibo": "weibo",
+                "sogou": "web",
+                "bilibili": "bilibili"
+            }.get(hotspot.source, "web")
     )
 
 
@@ -97,7 +102,7 @@ async def get_hotspots(
     cursor: Optional[str] = Query(None, description="游标分页，传入上次返回的 nextCursor"),
     pageSize: int = Query(20, ge=1, le=100, description="每页数量"),
     search: Optional[str] = Query(None, description="搜索关键词（搜索 title, summary, content）"),
-    sourceType: str = Query("all", description="来源类型: x, bing, all"),
+    sourceType: str = Query("all", description="来源类型: x, weibo, web, bilibili, all"),
     priority: str = Query("all", description="优先级: urgent, high, medium, low, all"),
     credibility: str = Query("all", description="可信度: high(≥80%), medium(≥50%), low(≥25%), all"),
     isReal: str = Query("all", description="内容真伪: true, false, all"),
@@ -119,10 +124,17 @@ async def get_hotspots(
         )
 
     # Source type filter
-    if sourceType == "x":
-        query = query.where(Hotspot.source == "twitter")
-    elif sourceType == "bing":
-        query = query.where(Hotspot.source == "bing")
+    if sourceType != "all":
+        source_mapping = {
+            "x": "twitter",
+            "weibo": "weibo",
+            "web": "sogou",
+            "bilibili": "bilibili"
+        }
+        if sourceType in source_mapping:
+            query = query.where(Hotspot.source == source_mapping[sourceType])
+        else:
+            query = query.where(Hotspot.source == sourceType)
 
     # Priority filter
     if priority != "all":

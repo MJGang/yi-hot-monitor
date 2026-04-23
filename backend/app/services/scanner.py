@@ -1,7 +1,7 @@
 """
 热点扫描服务
 
-协调 Twitter 搜索、Bing 搜索和 AI 分析
+协调 Twitter 搜索、搜狗搜索、B站搜索、微博热搜和 AI 分析
 """
 import asyncio
 import uuid
@@ -13,7 +13,7 @@ from app.database import async_session_maker
 
 from app.models import Keyword, Hotspot
 from app.services.twitter import search_twitter, parse_tweet_to_hotspot
-from app.services.search import search_bing, parse_bing_result_to_hotspot
+from app.services.china_search import search_sogou, search_bilibili_video, get_weibo_hotsearch, parse_china_result_to_hotspot
 from app.services.ai import batch_analyze
 
 
@@ -35,7 +35,7 @@ class ScanLock:
 
 async def scan_all_keywords(db: AsyncSession = None) -> dict:
     """
-    扫描所有活跃关键词
+    扫描所有活跃关键词 + 微博热搜
 
     Returns:
         扫描结果统计
@@ -50,16 +50,60 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
         should_close_db = True
 
     try:
-        # 获取所有活跃关键词
+        total_new = 0
+
+        # 1. 扫描所有活跃关键词
         result = await db.execute(select(Keyword).where(Keyword.is_active == True))
         keywords = result.scalars().all()
 
-        total_new = 0
         for keyword in keywords:
             count = await scan_keyword(db, keyword)
             total_new += count
             # 每个关键词之间稍作延迟，避免请求过快
             await asyncio.sleep(2)
+
+        # 2. 扫描微博热搜
+        try:
+            weibo_results = await get_weibo_hotsearch()
+            if weibo_results:
+                for result in weibo_results:
+                    parsed = parse_china_result_to_hotspot(result, "微博热搜")
+                    existing = await db.execute(
+                        select(Hotspot).where(
+                            Hotspot.source_id == parsed.get("source_id"),
+                            Hotspot.source == "weibo"
+                        )
+                    )
+                    if existing.scalar_one_or_none():
+                        continue
+                    hotspot = Hotspot(
+                        id=str(uuid.uuid4()),
+                        title=parsed["title"][:500] if parsed["title"] else "Untitled",
+                        content=parsed["content"][:5000] if parsed["content"] else "",
+                        url=parsed.get("url", ""),
+                        source="weibo",
+                        source_id=parsed.get("source_id", ""),
+                        author="微博热搜",
+                        author_handle="",
+                        author_avatar=None,
+                        author_followers=0,
+                        author_verified=False,
+                        is_real=True,
+                        relevance=50,
+                        importance="medium",
+                        summary=parsed["title"],
+                        reason="微博实时热搜榜",
+                        published_at=None,
+                        view_count=0,
+                        like_count=0,
+                        retweet_count=0,
+                        keyword_id=None
+                    )
+                    db.add(hotspot)
+                    total_new += 1
+                print(f"  Weibo hotsearch: found {len(weibo_results)} items")
+        except Exception as e:
+            print(f"  Weibo hotsearch error: {e}")
 
         return {"status": "completed", "new_hotspots": total_new}
     finally:
@@ -94,23 +138,33 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
     except Exception as e:
         print(f"  Twitter search error: {e}")
 
-    # 2. 从 Bing 搜索
+    # 2. 从搜狗搜索
     try:
-        bing_results = await search_bing(keyword.text, limit=10)
-        for result in bing_results:
-            parsed = parse_bing_result_to_hotspot(result, keyword.text)
+        sogou_results = await search_sogou(keyword.text, limit=5)
+        for result in sogou_results:
+            parsed = parse_china_result_to_hotspot(result, keyword.text)
             raw_results.append(parsed)
-        print(f"  Bing: found {len(bing_results)} results")
+        print(f"  Sogou: found {len(sogou_results)} results")
     except Exception as e:
-        print(f"  Bing search error: {e}")
+        print(f"  Sogou search error: {e}")
+
+    # 3. 从 B站搜索
+    try:
+        bilibili_results = await search_bilibili_video(keyword.text, limit=3)
+        for result in bilibili_results:
+            parsed = parse_china_result_to_hotspot(result, keyword.text)
+            raw_results.append(parsed)
+        print(f"  Bilibili: found {len(bilibili_results)} results")
+    except Exception as e:
+        print(f"  Bilibili search error: {e}")
 
     if not raw_results:
         return 0
 
-    # 3. AI 分析
+    # 4. AI 分析
     analyzed = await batch_analyze(raw_results, keyword)
 
-    # 4. 保存到数据库
+    # 5. 保存到数据库
     new_count = 0
     for hotspot_data in analyzed:
         # 检查是否已存在（通过 source_id 去重）
@@ -144,9 +198,9 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
             summary=hotspot_data.get("summary"),
             reason=hotspot_data.get("reason"),
             published_at=hotspot_data.get("published_at"),
-            view_count=hotspot_data.get("view_count"),
-            like_count=hotspot_data.get("like_count"),
-            retweet_count=hotspot_data.get("retweet_count"),
+            view_count=hotspot_data.get("stats", {}).get("views") or hotspot_data.get("view_count"),
+            like_count=hotspot_data.get("stats", {}).get("likes") or hotspot_data.get("like_count"),
+            retweet_count=hotspot_data.get("stats", {}).get("reposts") or hotspot_data.get("retweet_count"),
             keyword_id=keyword.id
         )
         db.add(hotspot)
