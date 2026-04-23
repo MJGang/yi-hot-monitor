@@ -134,12 +134,36 @@ cp .env.example .env
 npm run dev
 ```
 
-### 数据库
+### 数据库初始化
 
 ```bash
 cd backend
-uv run alembic upgrade head    # 运行数据库迁移
-uv run python -m app.db.init   # 初始化数据
+
+# 1. 创建数据库（MySQL 中执行）
+# CREATE DATABASE hotspot_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+# 2. 安装依赖
+uv sync
+
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件填入数据库连接和 API Keys
+
+# 4. 运行数据库迁移
+uv run alembic upgrade head
+
+# 5. 启动服务
+uv run uvicorn app.main:app --reload --port 3001
+```
+
+### 数据库迁移命令
+
+```bash
+uv run alembic upgrade head     # 升级到最新版本
+uv run alembic current          # 查看当前版本
+uv run alembic history          # 查看迁移历史
+uv run alembic downgrade -1     # 回滚一个版本
+uv run alembic revision -m "xxx" # 创建新迁移
 ```
 
 ## 📝 开发日志
