@@ -195,8 +195,7 @@ unsubscribe      # 取消订阅
 |------|------|
 | 前端 | React + Vite + TailwindCSS |
 | 后端 | Python + FastAPI + uv |
-| 数据库 | MySQL + SQLAlchemy | + FastAPI + uv |
-| 数据库 | SQLite + SQLAlchemy |
+| 数据库 | MySQL + SQLAlchemy |
 | AI | LangChain + LangGraph |
 | LLM | DeepSeek / MiniMax |
 
