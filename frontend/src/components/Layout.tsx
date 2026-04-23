@@ -33,7 +33,7 @@ export default function Layout() {
         <div className="liquid-glass h-12 flex items-center justify-between px-5" style={{ borderRadius: '0' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-2xl liquid-glass flex items-center justify-center" style={{ padding: '0' }}>
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-coral to-lavender flex items-center justify-center shadow-sm">
+              <div className="w-7 h-7 rounded-xl bg-linear-to-br from-coral to-lavender flex items-center justify-center shadow-sm">
                 <Flame className="w-4 h-4 text-white" />
               </div>
             </div>

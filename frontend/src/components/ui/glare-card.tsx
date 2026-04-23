@@ -50,7 +50,7 @@ export const GlareCard = ({
         }}
       />
       {/* 顶部微光 */}
-      <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 rounded-2xl bg-linear-to-b from-white/10 via-transparent to-transparent pointer-events-none" />
       {children}
     </div>
   );
