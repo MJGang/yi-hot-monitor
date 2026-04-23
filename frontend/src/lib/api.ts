@@ -29,7 +29,7 @@ export interface Hotspot {
   originalText: string | null
   url: string | null
   matchedKeywords: string[]
-  sourceType: 'x' | 'bing'
+  sourceType: 'x' | 'weibo' | 'web' | 'bilibili'
 }
 
 export interface HotspotsResponse {
@@ -91,7 +91,7 @@ export interface HotspotFilters {
   cursor?: string
   pageSize?: number
   search?: string
-  sourceType?: 'all' | 'x' | 'bing'
+  sourceType?: 'all' | 'x' | 'weibo' | 'web' | 'bilibili'
   priority?: 'all' | 'urgent' | 'high' | 'medium' | 'low'
   credibility?: 'all' | 'high' | 'medium' | 'low'
   isReal?: 'all' | 'real' | 'fake'

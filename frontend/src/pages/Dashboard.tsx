@@ -9,7 +9,7 @@ import { getHotspots, getStats, triggerScan, type Hotspot, type HotspotFilters, 
 // 筛选器配置
 interface FilterState {
   search: string
-  sourceType: 'all' | 'x' | 'bing'
+  sourceType: 'all' | 'x' | 'weibo' | 'web' | 'bilibili'
   priority: 'all' | 'urgent' | 'high' | 'medium' | 'low'
   credibility: 'all' | 'high' | 'medium' | 'low'
   isReal: 'all' | 'real' | 'fake'
@@ -389,7 +389,9 @@ export default function Dashboard() {
           >
             <option value="all">全部来源</option>
             <option value="x">X (Twitter)</option>
-            <option value="bing">Bing</option>
+            <option value="weibo">微博</option>
+            <option value="web">网页</option>
+            <option value="bilibili">B站</option>
           </select>
           <select
             value={filters.priority}
