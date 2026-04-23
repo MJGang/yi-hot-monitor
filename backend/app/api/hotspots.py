@@ -8,16 +8,18 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, or_
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Hotspot, Keyword
 from app.schemas.schemas import HotspotResponse, HotspotsListResponse, ScanResponse
+from app.services.scanner import scan_all_keywords
 
 router = APIRouter(prefix="/api", tags=["热点接口"])
 
 
-def hotspot_to_response(hotspot: Hotspot) -> HotspotResponse:
+def hotspot_to_response(hotspot: Hotspot, keyword_text: str = None) -> HotspotResponse:
     """
     将 Hotspot 数据库模型转换为 API 响应模型
 
@@ -45,23 +47,24 @@ def hotspot_to_response(hotspot: Hotspot) -> HotspotResponse:
         id=hotspot.id,
         title=hotspot.title,
         source=hotspot.source,
-        author=hotspot.source,  # Use source as author
-        authorAvatar=hotspot.source[:2] if hotspot.source else "UN",
-        handle=f"@{hotspot.source}" if hotspot.source else "@unknown",
+        author=hotspot.author or hotspot.source,
+        authorAvatar=hotspot.author_avatar or (hotspot.author or hotspot.source or "UN")[:2].upper(),
+        handle=f"@{hotspot.author_handle}" if hotspot.author_handle else f"@{hotspot.source}" if hotspot.source else "@unknown",
         time=time_ago,
         publishedAt=hotspot.published_at.isoformat() if hotspot.published_at else None,
         capturedAt=hotspot.created_at.isoformat() if hotspot.created_at else None,
         priority=hotspot.importance or "low",
         credibility=hotspot.relevance or 0,
         isReal=hotspot.is_real if hotspot.is_real is not None else True,
-        isVerified=False,
-        followers=0,
+        isVerified=hotspot.author_verified or False,
+        followers=hotspot.author_followers or 0,
         icon="flame",
         stats={"reposts": hotspot.retweet_count or 0, "comments": 0, "likes": hotspot.like_count or 0, "views": hotspot.view_count or 0},
         summary=hotspot.summary,
-        aiReason=hotspot.summary,  # Use summary as AI reason
+        aiReason=hotspot.reason,
         originalText=hotspot.content[:200] if hotspot.content else None,
-        matchedKeywords=[hotspot.keyword.text] if hotspot.keyword else [],
+        url=hotspot.url,
+        matchedKeywords=[keyword_text] if keyword_text else [],
         sourceType="x" if hotspot.source == "twitter" else "bing"
     )
 
@@ -101,8 +104,8 @@ async def get_hotspots(
     db: AsyncSession = Depends(get_db)
 ):
     """获取热点列表（支持无限滚动）"""
-    # Build query
-    query = select(Hotspot).order_by(Hotspot.created_at.desc())
+    # Build query with joinedload for keyword
+    query = select(Hotspot).options(joinedload(Hotspot.keyword)).order_by(Hotspot.created_at.desc())
 
     # Search filter
     if search:
@@ -163,7 +166,7 @@ async def get_hotspots(
     total = len(total_result.scalars().all())
 
     return HotspotsListResponse(
-        data=[hotspot_to_response(h) for h in hotspots],
+        data=[hotspot_to_response(h, h.keyword.text if h.keyword else None) for h in hotspots],
         nextCursor=str(hotspots[-1].created_at.timestamp()) if hotspots and has_next else None,
         total=total
     )
@@ -191,7 +194,9 @@ async def get_hotspots(
         500: {"description": "服务器内部错误"}
     }
 )
-async def trigger_scan():
+async def trigger_scan(db: AsyncSession = Depends(get_db)):
     """手动触发扫描"""
-    # TODO: Implement actual scan logic with LangGraph
+    import asyncio
+    # Run scan in background to avoid blocking the request
+    asyncio.create_task(scan_all_keywords(db))
     return ScanResponse(status="started", message="扫描已开始")

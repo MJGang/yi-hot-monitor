@@ -63,6 +63,7 @@ class HotspotResponse(BaseModel):
     summary: Optional[str] = None
     aiReason: Optional[str] = None
     originalText: Optional[str] = None
+    url: Optional[str] = None
     matchedKeywords: list[str] = []
     sourceType: str = "x"  # x, bing
 

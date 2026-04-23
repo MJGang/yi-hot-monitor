@@ -28,10 +28,18 @@ class Hotspot(Base):
     url = Column(String(1000), nullable=False)
     source = Column(String(50), nullable=False)  # twitter, bing
     source_id = Column(String(255), nullable=True)
+    # 作者信息
+    author = Column(String(255), nullable=True)
+    author_handle = Column(String(255), nullable=True)
+    author_avatar = Column(String(500), nullable=True)
+    author_followers = Column(Integer, default=0)
+    author_verified = Column(Boolean, default=False)
+    # 内容属性
     is_real = Column(Boolean, default=True)
     relevance = Column(Integer, default=0)  # 0-100
     importance = Column(String(20), default="low")  # low, medium, high, urgent
     summary = Column(Text, nullable=True)
+    reason = Column(Text, nullable=True)  # AI 分析理由
     view_count = Column(Integer, nullable=True)
     like_count = Column(Integer, nullable=True)
     retweet_count = Column(Integer, nullable=True)
