@@ -271,7 +271,7 @@ class RateLimiter:
 
 ---
 
-## 4. SQLAlchemy + SQLite 配置
+## 4. SQLAlchemy + MySQL 配置
 
 ### 4.1 模型定义
 
@@ -526,3 +526,224 @@ async def send_email_notification(hotspot: dict):
         start_tls=True
     )
 ```
+
+---
+
+## 8. RESTful API 接口文档
+
+### 8.1 热点接口
+
+#### GET /api/hotspots - 热点列表（无限滚动）
+
+**请求参数（Query）：**
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `cursor` | string | null | 游标分页，传入上次返回的 `nextCursor` |
+| `pageSize` | number | 20 | 每页数量 |
+| `search` | string | - | 搜索关键词（搜索 title, summary, author, matchedKeywords） |
+| `sourceType` | `x` \| `bing` \| `all` | `all` | 来源类型 |
+| `priority` | `urgent` \| `high` \| `medium` \| `low` \| `all` | `all` | 优先级 |
+| `credibility` | `high` \| `medium` \| `low` \| `all` | `all` | 可信度等级（high≥80%, medium≥50%, low≥25%） |
+| `isReal` | `true` \| `false` \| `all` | `all` | 内容真伪 |
+
+**响应：**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "title": "GPT-5 即将发布？OpenAI CEO 暗示重大更新",
+      "source": "OpenAI",
+      "author": "OpenAI",
+      "authorAvatar": "OA",
+      "handle": "@OpenAI",
+      "time": "2分钟前",
+      "publishedAt": "2024-01-15T10:30:00Z",
+      "capturedAt": "2024-01-15T10:32:00Z",
+      "priority": "urgent",
+      "credibility": 92,
+      "isReal": true,
+      "isVerified": true,
+      "followers": 8420000,
+      "icon": "flame",
+      "stats": {
+        "reposts": 1200,
+        "comments": 847,
+        "likes": 2300,
+        "views": 156000
+      },
+      "summary": "Sam Altman 在最新采访中暗示 GPT-5 将在今年发布，具备多模态能力和更强的推理能力。",
+      "aiReason": "内容来源于 OpenAI 官方账号，CEO 亲自暗示，信息来源可靠。",
+      "originalText": "The next generation of AI is going to be more capable than we can currently imagine.",
+      "matchedKeywords": ["GPT-5", "OpenAI"],
+      "sourceType": "x"
+    }
+  ],
+  "nextCursor": "xxx",
+  "total": 123
+}
+```
+
+#### POST /api/scan - 手动触发扫描
+
+**响应：**
+```json
+{
+  "status": "started" | "already_running",
+  "message": "扫描已开始" | "扫描已在运行中"
+}
+```
+
+---
+
+### 8.2 关键词接口
+
+#### GET /api/keywords - 关键词列表
+
+**响应：**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "text": "GPT-5",
+      "icon": "sparkles",
+      "hotspotCount": 12,
+      "isActive": true,
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### POST /api/keywords - 添加关键词
+
+**请求：**
+```json
+{ "text": "Claude 3.5" }
+```
+
+**响应：**
+```json
+{ "id": "uuid", "text": "Claude 3.5", "icon": "cpu", "hotspotCount": 0, "isActive": true, "createdAt": "2024-01-15T10:30:00Z" }
+```
+
+#### PUT /api/keywords/:id - 更新关键词
+
+**请求：**
+```json
+{ "text": "新文本", "isActive": true }
+```
+
+#### DELETE /api/keywords/:id - 删除关键词
+
+**响应：**
+```json
+{ "status": "ok" }
+```
+
+---
+
+### 8.3 通知接口
+
+#### GET /api/notifications - 通知历史
+
+**请求参数（Query）：**
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `type` | `all` \| `browser` \| `email` | `all` | 通知类型 |
+| `page` | number | 1 | 页码 |
+| `pageSize` | number | 20 | 每页数量 |
+
+**响应：**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "title": "GPT-5 即将发布？OpenAI CEO 暗示重大更新",
+      "type": "browser",
+      "priority": "urgent",
+      "credibility": 92,
+      "isReal": true,
+      "time": "10分钟前",
+      "source": "X @OpenAI",
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total": 45
+}
+```
+
+#### DELETE /api/notifications/:id - 删除单条通知
+#### DELETE /api/notifications - 清空所有通知
+
+---
+
+### 8.4 设置接口
+
+#### GET /api/settings - 获取设置
+
+**响应：**
+```json
+{
+  "theme": "dark",
+  "browserNotify": true,
+  "emailNotify": true,
+  "notifyEmail": "user@example.com",
+  "notifyFrequency": "realtime",
+  "quietHoursEnabled": false,
+  "quietHoursStart": "22:00",
+  "quietHoursEnd": "08:00",
+  "scanInterval": 30,
+  "dataSources": {
+    "x": true,
+    "bing": true
+  },
+  "autoScan": true,
+  "openrouterApiKey": "sk-or-v1-xxx...xxx",
+  "twitterApiKey": ""
+}
+```
+
+#### PUT /api/settings - 更新设置
+
+**请求（部分更新）：**
+```json
+{
+  "theme": "dark",
+  "scanInterval": 15
+}
+```
+
+---
+
+### 8.5 统计接口
+
+#### GET /api/stats - 仪表盘统计
+
+**响应：**
+```json
+{
+  "todayHotspots": 12,
+  "credibilityRate": 89,
+  "collectionStatus": "running"
+}
+```
+
+---
+
+### 8.6 WebSocket 事件
+
+**服务端 → 客户端：**
+| 事件 | 说明 | 数据结构 |
+|------|------|----------|
+| `hotspot:new` | 新热点发现 | Hotspot 对象 |
+| `hotspot:update` | 热点更新 | Hotspot 对象 |
+| `notification` | 通知消息 | Notification 对象 |
+
+**客户端 → 服务端：**
+| 事件 | 说明 | 数据结构 |
+|------|------|----------|
+| `subscribe` | 订阅关键词房间 | `{ "keywords": ["GPT-5", "Claude"] }` |
+| `unsubscribe` | 取消订阅 | `{ "keywords": ["GPT-5"] }` |
