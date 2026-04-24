@@ -1,9 +1,14 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+
+
+def beijing_now():
+    """返回北京时间（UTC+8）的当前时间"""
+    return datetime.now(timezone(timedelta(hours=8)))
 
 
 class Keyword(Base):
@@ -13,8 +18,8 @@ class Keyword(Base):
     text = Column(String(255), unique=True, nullable=False)
     category = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
+    updated_at = Column(DateTime, default=beijing_now, onupdate=beijing_now)
 
     hotspots = relationship("Hotspot", back_populates="keyword")
 
@@ -44,7 +49,7 @@ class Hotspot(Base):
     like_count = Column(Integer, nullable=True)
     retweet_count = Column(Integer, nullable=True)
     published_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
     keyword_id = Column(String(36), ForeignKey("keywords.id"), nullable=True)
 
     keyword = relationship("Keyword", back_populates="hotspots")
@@ -59,7 +64,7 @@ class Notification(Base):
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     hotspot_id = Column(String(36), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=beijing_now)
 
 
 class Setting(Base):

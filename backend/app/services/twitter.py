@@ -11,11 +11,15 @@ from app.config import get_settings
 
 
 def parse_twitter_date(date_str: str) -> Optional[datetime]:
-    """解析 Twitter API 返回的日期字符串"""
+    """解析 Twitter API 返回的日期字符串，转换为北京时间"""
     if not date_str:
         return None
     try:
-        return datetime.strptime(date_str, "%a %b %d %H:%M:%S %z %Y")
+        dt = datetime.strptime(date_str, "%a %b %d %H:%M:%S %z %Y")
+        # 转换为北京时间 (UTC+8)
+        from datetime import timezone, timedelta
+        beijing_tz = timezone(timedelta(hours=8))
+        return dt.astimezone(beijing_tz)
     except ValueError:
         return None
 
