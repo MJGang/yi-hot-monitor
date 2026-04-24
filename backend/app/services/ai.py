@@ -158,31 +158,37 @@ async def analyze_hotspot(content: str, keyword: str = "", pre_match_result: dic
         }
 
     try:
-        # 构建带预匹配信息的 prompt
+        # 构建带预匹配信息的 prompt（使用字符串拼接避免 f-string 转义问题）
         match_hint = ""
         if match_result["matched"]:
-            match_hint = f"\n注意：文本预匹配发现内容中包含以下关键词变体：{', '.join(match_result['matched_terms'])}"
+            matched_terms_str = ', '.join(match_result['matched_terms'])
+            match_hint = "\n注意：文本预匹配发现内容中包含以下关键词变体：" + matched_terms_str
         else:
-            match_hint = f"\n注意：文本预匹配发现内容中未直接提及关键词'{keyword}'的任何变体，请特别严格审核相关性。"
+            match_hint = "\n注意：文本预匹配发现内容中未直接提及关键词'" + keyword + "'的任何变体，请特别严格审核相关性。"
+
+        # 构建 system message（不使用 f-string，避免 {{}} 被转义）
+        system_msg = (
+            "你是一个热点内容精准匹配专家。你的任务是判断一段内容是否与指定的监控关键词【" + keyword + "】直接相关。"
+            + match_hint + "\n\n"
+            "分析要点：\n"
+            "1. 判断是否为真实有价值的信息（排除标题党、假新闻、营销软文）\n"
+            "2. 判断内容是否直接涉及关键词，注意：\n"
+            "   - 仅仅属于同一领域但未提及关键词的内容，相关性应低于 40 分\n"
+            "   - 内容必须直接讨论、提及关键词才能获得 60 分以上\n"
+            "   - 只是间接沾边应给 30-50 分\n"
+            "3. 评估热点的重要程度\n"
+            "4. 用一句话说明此内容与关键词的关联\n\n"
+            "请以 JSON 格式输出，字段：\n"
+            "isReal: true 或 false\n"
+            "relevance: 0-100 的数字\n"
+            "importance: low 或 medium 或 high 或 urgent\n"
+            "summary: 一句话描述内容与关键词的关联\n"
+            "reason: 打分理由\n\n"
+            "只输出 JSON，不要有其他内容。"
+        )
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", f"""你是一个热点内容精准匹配专家。你的任务是判断一段内容是否与指定的监控关键词【{keyword}】直接相关。
-
-{match_hint}
-
-分析要点：
-1. 判断是否为真实有价值的信息（排除标题党、假新闻、营销软文）
-2. 判断内容是否【直接】涉及关键词"{keyword}"。注意：
-   - 仅仅属于同一领域但未提及关键词的内容，相关性应低于 40 分
-   - 内容必须直接讨论、提及或与"{keyword}"有实质关联才能获得 60 分以上
-   - 只是间接沾边（如同类产品、同领域但不同主题）应给 30-50 分
-3. 评估热点的重要程度（对关注"{keyword}"的人来说有多重要）
-4. 用一句话说明此内容与"{keyword}"的关联
-
-请以 JSON 格式输出：
-{{"isReal": true/false, "relevance": 0-100, "importance": "low/medium/high/urgent", "summary": "此内容与【{keyword}】的关联：...", "reason": "相关性打分理由..."}}
-
-只输出 JSON，不要有其他内容。"""),
+            ("system", system_msg),
             ("user", "内容：{content}")
         ])
 
@@ -203,7 +209,7 @@ async def analyze_hotspot(content: str, keyword: str = "", pre_match_result: dic
             "relevance": 30 if match_result["matched"] else 10,
             "importance": "low",
             "summary": content[:50],
-            "reason": f"AI 分析失败，使用默认分数: {str(e)}"
+            "reason": "AI 分析失败，使用默认分数"
         }
 
 
@@ -257,7 +263,7 @@ async def batch_analyze(items: list[dict], keyword: str) -> list[dict]:
                     "view_count": item.get("stats", {}).get("views"),
                     "like_count": item.get("stats", {}).get("likes"),
                     "retweet_count": item.get("stats", {}).get("reposts"),
-                    "keyword_id": keyword.id if hasattr(keyword, 'id') else None
+                    "keyword_id": None
                 }
                 return hotspot
             except Exception as e:
