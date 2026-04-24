@@ -200,96 +200,98 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
           </div>
         )}
 
-        {/* Author info */}
-        <div className="flex items-center gap-2 mt-3">
-          {hotspot.authorAvatar?.startsWith('http') || hotspot.authorAvatar?.startsWith('//') ? (
-            <img
-              src={hotspot.authorAvatar?.startsWith('//') ? 'https:' + hotspot.authorAvatar : hotspot.authorAvatar}
-              alt={hotspot.author}
-              className="w-6 h-6 rounded-full shrink-0 object-cover"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: avatarColor }}>
-              {hotspot.authorAvatar || 'UN'}
+        {/* Author info - B站/X/微博 显示 */}
+        {(hotspot.sourceType === 'bilibili' || hotspot.sourceType === 'x' || hotspot.sourceType === 'weibo') && (
+          <div className="flex items-center gap-2 mt-3">
+            {hotspot.authorAvatar?.startsWith('http') || hotspot.authorAvatar?.startsWith('//') ? (
+              <img
+                src={hotspot.authorAvatar?.startsWith('//') ? 'https:' + hotspot.authorAvatar : hotspot.authorAvatar}
+                alt={hotspot.author}
+                className="w-6 h-6 rounded-full shrink-0 object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: avatarColor }}>
+                {hotspot.authorAvatar || 'UN'}
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-text-secondary">{hotspot.author}</span>
+              {hotspot.isVerified && <BadgeCheck className="w-4 h-4 text-sky shrink-0" />}
             </div>
-          )}
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-text-secondary">{hotspot.author}</span>
-            {hotspot.isVerified && <BadgeCheck className="w-4 h-4 text-sky shrink-0" />}
           </div>
-          {hotspot.sourceType !== 'bilibili' && hotspot.sourceType !== 'weibo' && (
-            <>
-              <span className="text-xs text-text-muted">·</span>
-              <span className="text-xs text-text-muted">{hotspot.followers?.toLocaleString() || 0}粉丝</span>
-            </>
-          )}
-        </div>
+        )}
 
-        {/* Time info */}
-        <div className="flex items-center gap-4 mt-2 text-xs text-text-muted">
-          <div className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
-            <span>发布于：{formatDateTime(hotspot.publishedAt)}</span>
+        {/* Time info - B站/X/微博 显示 */}
+        {(hotspot.sourceType === 'bilibili' || hotspot.sourceType === 'x' || hotspot.sourceType === 'weibo') && (
+          <div className="flex items-center gap-4 mt-2 text-xs text-text-muted">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              <span>发布于：{formatDateTime(hotspot.publishedAt)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" />
+              <span>抓取于：{formatDateTime(hotspot.capturedAt)}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Download className="w-3.5 h-3.5" />
-            <span>抓取于：{formatDateTime(hotspot.capturedAt)}</span>
-          </div>
-        </div>
+        )}
 
-        {/* Stats row */}
-        <div className="flex items-center gap-4 mt-3 py-2 border-t border-white/10">
-          {hotspot.sourceType === 'bilibili' || hotspot.sourceType === 'x' ? (
-            // B站/X: 点赞/评论/收藏
-            <>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Heart className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Bookmark className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.favorites || hotspot.stats?.reposts || 0)}</span>
-              </div>
-            </>
-          ) : (
-            // 网页: 转发/评论/点赞/浏览
-            <>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Repeat className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.reposts || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Heart className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                <Eye className="w-3.5 h-3.5" />
-                <span>{formatNumber(hotspot.stats?.views || 0)}</span>
-              </div>
-            </>
-          )}
-          {hotspot.url && (
+        {/* Stats row - B站/X/微博 显示 */}
+        {(hotspot.sourceType === 'bilibili' || hotspot.sourceType === 'x' || hotspot.sourceType === 'weibo') && (
+          <div className="flex items-center gap-4 mt-3 py-2 border-t border-white/10">
+            {hotspot.sourceType === 'bilibili' || hotspot.sourceType === 'x' ? (
+              <>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Heart className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Bookmark className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.favorites || hotspot.stats?.reposts || 0)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Repeat className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.reposts || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Heart className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{formatNumber(hotspot.stats?.views || 0)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 原文链接 - 所有来源都显示 */}
+        {hotspot.url && (
+          <div className="flex items-center justify-end mt-3">
             <a
               href={hotspot.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 ml-auto"
+              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80"
               onClick={(e) => e.stopPropagation()}
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>原文</span>
             </a>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {expanded && hotspot.aiReason && (
