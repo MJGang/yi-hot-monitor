@@ -24,7 +24,7 @@ npm run preview  # 预览构建结果
 ```bash
 cd backend
 uv sync                    # 安装依赖
-uv run uvicorn app.main:app --reload --port 3001  # 启动开发服务器
+uv run python -m uvicorn app.main:app --reload --port 3001  # 启动开发服务器
 uv run pytest              # 运行测试
 uv run pytest tests/xxx.py::test_func  # 运行单个测试
 ```
@@ -186,7 +186,7 @@ cd backend
 cp .env.example .env          # 编辑 .env 填写数据库配置
 chmod +x setup.sh
 ./setup.sh                    # 或手动: uv sync
-uv run uvicorn app.main:app --reload --port 3001
+uv run python -m uvicorn app.main:app --reload --port 3001
 ```
 
 ### 数据库创建（如不存在）
