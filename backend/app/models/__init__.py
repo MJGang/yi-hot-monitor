@@ -47,6 +47,9 @@ class Hotspot(Base):
     reason = Column(Text, nullable=True)  # AI 分析理由
     view_count = Column(Integer, nullable=True)
     like_count = Column(Integer, nullable=True)
+    comment_count = Column(Integer, nullable=True)  # 评论/弹幕数
+    coin_count = Column(Integer, nullable=True)  # B站投币
+    favorite_count = Column(Integer, nullable=True)  # B站收藏
     retweet_count = Column(Integer, nullable=True)
     published_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=beijing_now)

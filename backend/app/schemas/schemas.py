@@ -40,6 +40,8 @@ class HotspotStats(BaseModel):
     comments: int = 0
     likes: int = 0
     views: int = 0
+    favorites: int = 0
+    coins: int = 0
 
 
 class HotspotResponse(BaseModel):

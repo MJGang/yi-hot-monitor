@@ -238,9 +238,11 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
         if hotspot_data.get("relevance", 50) < 50:
             continue
 
-        # 检查是否已存在（通过 source_id 去重）
-        source_id = hotspot_data.get("source_id")
+        # 检查是否已存在（通过 source_id 去重），过长时截断
+        source_id = hotspot_data.get("source_id", "")
         if source_id:
+            # source_id 最大 255 字符，超过则截断
+            source_id = source_id[:255]
             existing = await db.execute(
                 select(Hotspot).where(
                     Hotspot.source_id == source_id,
@@ -271,6 +273,9 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
             published_at=hotspot_data.get("published_at"),
             view_count=hotspot_data.get("stats", {}).get("views") or hotspot_data.get("view_count"),
             like_count=hotspot_data.get("stats", {}).get("likes") or hotspot_data.get("like_count"),
+            comment_count=hotspot_data.get("stats", {}).get("comments") or hotspot_data.get("comment_count"),
+            coin_count=hotspot_data.get("stats", {}).get("coins") or hotspot_data.get("coin_count"),
+            favorite_count=hotspot_data.get("stats", {}).get("favorites") or hotspot_data.get("favorite_count"),
             retweet_count=hotspot_data.get("stats", {}).get("reposts") or hotspot_data.get("retweet_count"),
             keyword_id=keyword.id
         )

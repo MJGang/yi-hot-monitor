@@ -60,7 +60,14 @@ def hotspot_to_response(hotspot: Hotspot, keyword_text: str = None) -> HotspotRe
         isVerified=hotspot.author_verified or False,
         followers=hotspot.author_followers or 0,
         icon="flame",
-        stats={"reposts": hotspot.retweet_count or 0, "comments": 0, "likes": hotspot.like_count or 0, "views": hotspot.view_count or 0},
+        stats={
+            "reposts": hotspot.retweet_count or 0,
+            "comments": hotspot.comment_count or 0,
+            "likes": hotspot.like_count or 0,
+            "views": hotspot.view_count or 0,
+            "coins": hotspot.coin_count or 0,
+            "favorites": hotspot.favorite_count or 0
+        },
         summary=hotspot.summary,
         aiReason=hotspot.reason,
         originalText=hotspot.content[:200] if hotspot.content else None,
@@ -127,13 +134,13 @@ async def get_hotspots(
     # Source type filter
     if sourceType != "all":
         source_mapping = {
-            "x": "twitter",
-            "weibo": "weibo",
-            "web": "sogou",
-            "bilibili": "bilibili"
+            "x": ["twitter"],
+            "weibo": ["weibo"],
+            "web": ["sogou", "bing"],  # 网页来源包括搜狗和必应
+            "bilibili": ["bilibili"]
         }
         if sourceType in source_mapping:
-            query = query.where(Hotspot.source == source_mapping[sourceType])
+            query = query.where(Hotspot.source.in_(source_mapping[sourceType]))
         else:
             query = query.where(Hotspot.source == sourceType)
 

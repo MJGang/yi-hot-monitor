@@ -5,6 +5,8 @@ export interface HotspotStats {
   comments: number
   likes: number
   views: number
+  coins?: number    // B站投币
+  favorites?: number // B站收藏
 }
 
 export interface Hotspot {

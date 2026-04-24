@@ -218,8 +218,12 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
             <span className="text-xs text-text-secondary">{hotspot.author}</span>
             {hotspot.isVerified && <BadgeCheck className="w-4 h-4 text-sky shrink-0" />}
           </div>
-          <span className="text-xs text-text-muted">·</span>
-          <span className="text-xs text-text-muted">{hotspot.followers?.toLocaleString() || 0}粉丝</span>
+          {hotspot.sourceType !== 'bilibili' && hotspot.sourceType !== 'weibo' && (
+            <>
+              <span className="text-xs text-text-muted">·</span>
+              <span className="text-xs text-text-muted">{hotspot.followers?.toLocaleString() || 0}粉丝</span>
+            </>
+          )}
         </div>
 
         {/* Time info */}
@@ -236,22 +240,43 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
 
         {/* Stats row */}
         <div className="flex items-center gap-4 mt-3 py-2 border-t border-white/10">
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-            <Repeat className="w-3.5 h-3.5" />
-            <span>{formatNumber(hotspot.stats?.reposts || 0)}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-            <Heart className="w-3.5 h-3.5" />
-            <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
-            <Eye className="w-3.5 h-3.5" />
-            <span>{formatNumber(hotspot.stats?.views || 0)}</span>
-          </div>
+          {hotspot.sourceType === 'bilibili' || hotspot.sourceType === 'x' ? (
+            // B站/X: 点赞/评论/收藏
+            <>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Heart className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Bookmark className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.favorites || hotspot.stats?.reposts || 0)}</span>
+              </div>
+            </>
+          ) : (
+            // 网页: 转发/评论/点赞/浏览
+            <>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Repeat className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.reposts || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.comments || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Heart className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.likes || 0)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                <Eye className="w-3.5 h-3.5" />
+                <span>{formatNumber(hotspot.stats?.views || 0)}</span>
+              </div>
+            </>
+          )}
           {hotspot.url && (
             <a
               href={hotspot.url}

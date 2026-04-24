@@ -135,7 +135,7 @@ async def search_bilibili_video(keyword: str, limit: int = 10) -> list[dict]:
                     "keyword": keyword,
                     "page": 1,
                     "pagesize": min(limit, 20),
-                    "order": "totalrank"
+                    "order": "pubdate"  # 按最新投稿排序，而不是综合排序
                 }
             )
             response.raise_for_status()
@@ -152,6 +152,7 @@ async def search_bilibili_video(keyword: str, limit: int = 10) -> list[dict]:
     items = data.get("data", {}).get("result", [])
 
     for item in items:
+        print(f"Bilibili API - item: {item}")
         results.append({
             "title": item.get("title", "").replace('<em class="keyword">', '').replace('</em>', ''),
             "content": item.get("description", ""),
@@ -164,8 +165,8 @@ async def search_bilibili_video(keyword: str, limit: int = 10) -> list[dict]:
             "stats": {
                 "views": item.get("play", 0),
                 "likes": item.get("like", 0),
-                "comments": item.get("video_review", 0),
-                "reposts": 0
+                "favorites": item.get("favorites", 0),
+                "comments": item.get("review", 0)
             },
             "matched_keyword": keyword,
             "source_type": "bilibili"

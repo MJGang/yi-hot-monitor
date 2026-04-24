@@ -192,8 +192,21 @@ async def analyze_hotspot(content: str, keyword: str = "", pre_match_result: dic
             ("user", "内容：{content}")
         ])
 
-        chain = prompt | llm | JsonOutputParser()
-        result = await chain.ainvoke({"content": content[:2000]})  # 限制内容长度
+        chain = prompt | llm
+        response = await chain.ainvoke({"content": content[:2000]})  # 限制内容长度
+        raw_content = response.content if hasattr(response, 'content') else str(response)
+        # 手动解析 JSON，处理 LLM 输出裸字符串的情况（如 importance: medium 而非 importance: "medium"）
+        import json
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', raw_content)
+        if json_match:
+            raw_json = json_match[0]
+            # 修复裸字符串：确保字符串字段（importance, summary, reason）有引号
+            # isReal 的 true/false 是 JSON 布尔值，不要加引号
+            raw_json = re.sub(r'"(importance|summary|reason)":\s*([a-zA-Z_][a-zA-Z0-9_]*)', r'"\1": "\2"', raw_json)
+            result = json.loads(raw_json)
+        else:
+            raise ValueError("No JSON found in response")
 
         return {
             "isReal": result.get("isReal", True),
@@ -262,6 +275,8 @@ async def batch_analyze(items: list[dict], keyword: str) -> list[dict]:
                     "published_at": item.get("published_at"),
                     "view_count": item.get("stats", {}).get("views"),
                     "like_count": item.get("stats", {}).get("likes"),
+                    "comment_count": item.get("stats", {}).get("comments"),
+                    "favorite_count": item.get("stats", {}).get("favorites"),
                     "retweet_count": item.get("stats", {}).get("reposts"),
                     "keyword_id": None
                 }
