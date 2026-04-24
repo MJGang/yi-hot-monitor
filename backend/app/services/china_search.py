@@ -6,6 +6,7 @@
 import httpx
 import random
 import asyncio
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 
@@ -151,6 +152,7 @@ async def search_bilibili_video(keyword: str, limit: int = 10) -> list[dict]:
     items = data.get("data", {}).get("result", [])
 
     for item in items:
+        print(f"[Bilibili raw] {item}")
         results.append({
             "title": item.get("title", "").replace('<em class="keyword">', '').replace('</em>', ''),
             "content": item.get("description", ""),
@@ -158,8 +160,8 @@ async def search_bilibili_video(keyword: str, limit: int = 10) -> list[dict]:
             "source": "bilibili",
             "author": item.get("author", ""),
             "author_handle": f"uid:{item.get('mid', '')}",
-            "author_avatar": item.get("pic", ""),
-            "published_at": None,
+            "author_avatar": item.get("upic"),
+            "published_at": datetime.fromtimestamp(item.get("pubdate", 0), tz=timezone(timedelta(hours=8))) if item.get("pubdate") else None,
             "stats": {
                 "views": item.get("play", 0),
                 "likes": item.get("like", 0),

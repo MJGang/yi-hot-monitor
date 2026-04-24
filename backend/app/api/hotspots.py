@@ -6,7 +6,8 @@
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import select, or_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -182,6 +183,15 @@ async def get_hotspots(
         nextCursor=str(hotspots[-1].created_at.timestamp()) if hotspots and has_next else None,
         total=total
     )
+
+
+@router.get("/proxy")
+async def proxy_image(url: str = Query(...)):
+    """代理图片请求，解决跨域和 Referer 问题"""
+    import httpx
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(url, headers={"Referer": "https://www.bilibili.com"})
+        return Response(content=resp.content, media_type=resp.headers.get("content-type", "image/jpeg"))
 
 
 @router.post(
