@@ -6,7 +6,7 @@
 import asyncio
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers import interval
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.services.scanner import scan_all_keywords
 
@@ -38,7 +38,7 @@ def start_scheduler():
     # 添加定时任务
     scheduler.add_job(
         run_hotspot_check,
-        trigger=interval(minutes=SCAN_INTERVAL_MINUTES),
+        trigger=IntervalTrigger(minutes=SCAN_INTERVAL_MINUTES),
         id="hotspot_check",
         name="热点定时扫描",
         replace_existing=True,
