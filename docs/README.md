@@ -121,11 +121,11 @@ cp .env.example .env
 uv run uvicorn app.main:app --reload --port 3001
 ```
 
-### 前端 (client/)
+### 前端 (frontend/)
 
 ```bash
 # 1. 安装依赖
-cd client && npm install
+cd frontend && npm install
 
 # 2. 配置环境变量
 cp .env.example .env
@@ -153,7 +153,7 @@ cp .env.example .env
 uv run alembic upgrade head
 
 # 5. 启动服务
-uv run uvicorn app.main:app --reload --port 3001
+uv run python -m uvicorn app.main:app --reload --port 3001
 ```
 
 ### 数据库迁移命令
