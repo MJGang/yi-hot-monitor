@@ -145,7 +145,7 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
 
   return (
     <GlareCard className="px-0 pt-0">
-      <div className="cursor-pointer px-5 pt-4 bg-white/90 border-gray-200 shadow-md shadow-gray-300/50 dark:bg-[#1c1c1e]/90 dark:border-white/10 dark:shadow-black/40" onClick={() => setExpanded(!expanded)}>
+      <div className="cursor-pointer px-5 pt-4 pb-4 bg-white/90 border-gray-200 shadow-md shadow-gray-300/50 dark:bg-[#1c1c1e]/90 dark:border-white/10 dark:shadow-black/40" onClick={() => setExpanded(!expanded)}>
         {/* Top tags row */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2 flex-wrap">
@@ -179,6 +179,17 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
             >
               <Bookmark className={clsx('w-4 h-4 transition-colors', isBookmarked ? 'text-primary fill-primary' : 'text-text-muted')} />
             </motion.button>
+            {hotspot.url && (
+              <a
+                href={hotspot.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-8 h-8 rounded-xl glass-btn flex items-center justify-center cursor-pointer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-4 h-4 text-text-muted" />
+              </a>
+            )}
             <motion.button
               className="w-8 h-8 rounded-xl glass-btn flex items-center justify-center"
               onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
@@ -274,22 +285,6 @@ function HotspotCard({ hotspot }: HotspotCardProps) {
                 </div>
               </>
             )}
-          </div>
-        )}
-
-        {/* 原文链接 - 所有来源都显示 */}
-        {hotspot.url && (
-          <div className="flex items-center justify-end mt-3">
-            <a
-              href={hotspot.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>原文</span>
-            </a>
           </div>
         )}
       </div>
