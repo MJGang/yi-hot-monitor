@@ -225,7 +225,7 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
         return 0
 
     # AI 分析
-    analyzed = await batch_analyze(fresh_results, keyword)
+    analyzed = await batch_analyze(fresh_results, keyword.text)
 
     # 保存到数据库
     new_count = 0
