@@ -76,11 +76,15 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
     if not ScanLock.acquire():
         return {"status": "already_running", "new_hotspots": 0}
 
-    # 如果没有传入 db，则自己创建 session
-    should_close_db = False
-    if db is None:
-        db = async_session_maker()
-        should_close_db = True
+    # 总是创建自己的 session，避免外部 session 被关闭导致的问题
+    should_close_db = True
+    if db is not None:
+        # 如果传入了外部 session，先关闭它
+        try:
+            await db.close()
+        except:
+            pass
+    db = async_session_maker()
 
     try:
         total_new = 0

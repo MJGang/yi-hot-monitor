@@ -216,9 +216,10 @@ async def proxy_image(url: str = Query(...)):
         500: {"description": "服务器内部错误"}
     }
 )
-async def trigger_scan(db: AsyncSession = Depends(get_db)):
+async def trigger_scan():
     """手动触发扫描"""
     import asyncio
     # Run scan in background to avoid blocking the request
-    asyncio.create_task(scan_all_keywords(db))
+    # 注意：不传入 db session，让 scan_all_keywords 自己创建独立的 session
+    asyncio.create_task(scan_all_keywords())
     return ScanResponse(status="started", message="扫描已开始")
