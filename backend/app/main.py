@@ -19,8 +19,15 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
+
+    # 启动定时调度器
+    from app.jobs import start_scheduler
+    start_scheduler()
+
     yield
     # Shutdown
+    from app.jobs import stop_scheduler
+    stop_scheduler()
     await close_db()
 
 

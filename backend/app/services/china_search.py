@@ -152,7 +152,6 @@ async def search_bilibili_video(keyword: str, limit: int = 10) -> list[dict]:
     items = data.get("data", {}).get("result", [])
 
     for item in items:
-        print(f"[Bilibili raw] {item}")
         results.append({
             "title": item.get("title", "").replace('<em class="keyword">', '').replace('</em>', ''),
             "content": item.get("description", ""),
