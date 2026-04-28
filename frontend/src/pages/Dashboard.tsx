@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Search, Radar, ChevronDown, Loader2, Repeat, MessageCircle, Heart, Eye, BadgeCheck, Clock, ShieldCheck, ShieldAlert, ShieldX, Shield, Flame, Thermometer, Zap, Leaf, Snowflake, Filter, X, Check, Download, Tag, Bookmark, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, Radar, ChevronDown, Loader2, Repeat, MessageCircle, Heart, Eye, BadgeCheck, Clock, ShieldCheck, ShieldAlert, ShieldX, Shield, Flame, Thermometer, Zap, Leaf, Snowflake, Filter, X, Check, Download, Tag, Bookmark, ExternalLink, ArrowUp } from 'lucide-react'
 import { clsx } from 'clsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ParticleField } from '@/components/ui/Particle'
 import { GlareCard } from '@/components/ui/glare-card'
 import { getHotspots, getStats, triggerScan, type Hotspot, type HotspotFilters, type Stats } from '@/lib/api'
+import { io, Socket } from 'socket.io-client'
 
 // 筛选器配置
 interface FilterState {
@@ -318,6 +319,9 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showNewToast, setShowNewToast] = useState(false)
+  const socketRef = useRef<Socket | null>(null)
+  const newCountRef = useRef(0) // 用来在 toast 中显示
 
   // 获取热点数据
   const fetchHotspots = useCallback(async (filterParams: HotspotFilters = {}) => {
@@ -347,14 +351,46 @@ export default function Dashboard() {
     Promise.all([fetchHotspots(), fetchStats()]).finally(() => setLoading(false))
   }, [fetchHotspots, fetchStats])
 
+  // WebSocket 连接 - 开发环境直连后端
+  useEffect(() => {
+    const socketUrl = import.meta.env.DEV ? 'http://localhost:3001' : '/'
+    const socket = io(socketUrl, {
+      path: '/socket.io',
+      transports: ['websocket', 'polling']
+    })
+    socketRef.current = socket
+
+    socket.on('scan:start', () => {
+      setScanning(true)
+      fetchStats()
+    })
+
+    socket.on('scan:complete', (data: { new_hotspots: number }) => {
+      setScanning(false)
+      if (data.new_hotspots > 0) {
+        newCountRef.current = data.new_hotspots
+        setShowNewToast(true)
+        // 3秒后隐藏 toast
+        setTimeout(() => setShowNewToast(false), 3000)
+      }
+      // 更新统计数据
+      fetchStats()
+    })
+
+    // 获取初始状态
+    fetchStats()
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [fetchStats])
+
   // 处理扫描
   const handleScan = async () => {
     setScanning(true)
     try {
       await triggerScan()
-      // 扫描完成后重新获取数据
-      await fetchHotspots()
-      await fetchStats()
+      // 数据刷新由 WebSocket 推送处理，这里只需等待
     } catch (err) {
       console.error('扫描失败', err)
     } finally {
@@ -401,6 +437,26 @@ export default function Dashboard() {
 
   return (
     <>
+      {/* 新内容提示 Toast */}
+      <AnimatePresence>
+        {showNewToast && (
+          <motion.button
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-xl bg-mint/20 border border-mint/40 backdrop-blur-md shadow-lg cursor-pointer hover:bg-mint/30 transition-colors"
+            onClick={() => {
+              fetchHotspots()
+              fetchStats()
+              setShowNewToast(false)
+            }}
+          >
+            <ArrowUp className="w-4 h-4 text-mint" />
+            <span className="text-sm font-medium text-mint">发现 {newCountRef.current} 条新内容，点击查看</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {/* Toolbar */}
       <div className="liquid-glass flex items-center justify-between px-6 py-3 relative z-10 h-16" style={{ borderRadius: '0', borderBottom: '0.5px solid rgba(255,255,255,0.4)' }}>
         <div className="flex items-center gap-4 flex-1 max-w-lg h-full">

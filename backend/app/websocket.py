@@ -1,9 +1,11 @@
 import socketio
 
 sio = socketio.AsyncServer(
+    async_mode='asgi',
     cors={
         "origins": ["*"],
-        "methods": ["GET", "POST"]
+        "methods": ["GET", "POST"],
+        "allow_headers": ["*"]
     }
 )
 
@@ -49,3 +51,15 @@ async def notify_new_hotspot(hotspot: dict, keyword: str):
 async def notify_update(hotspot: dict, keyword: str):
     """Emit hotspot update event"""
     await sio.emit("hotspot:update", hotspot, room=f"keyword:{keyword}")
+
+
+async def notify_scan_complete(new_count: int):
+    """Emit scan complete event to all connected clients"""
+    print(f"[WebSocket] Emitting scan:complete with {new_count} new hotspots, connected rooms: {sio.manager.rooms}")
+    await sio.emit("scan:complete", {"new_hotspots": new_count})
+
+
+async def notify_scan_start():
+    """Emit scan start event to all connected clients"""
+    print(f"[WebSocket] Emitting scan:start")
+    await sio.emit("scan:start", {})

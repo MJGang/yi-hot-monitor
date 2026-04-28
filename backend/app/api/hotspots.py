@@ -228,5 +228,6 @@ async def trigger_scan():
     import asyncio
     # Run scan in background to avoid blocking the request
     # 注意：不传入 db session，让 scan_all_keywords 自己创建独立的 session
+    print("[API] Creating scan task...")
     asyncio.create_task(scan_all_keywords())
     return ScanResponse(status="started", message="扫描已开始")

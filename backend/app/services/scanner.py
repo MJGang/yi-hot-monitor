@@ -18,6 +18,7 @@ from app.services.china_search import search_sogou, search_bilibili_video, get_w
 from app.services.search import search_bing, parse_bing_result_to_hotspot
 from app.services.ai import batch_analyze
 from app.services.account_detector import detect_account_type
+from app.websocket import notify_scan_complete, notify_scan_start
 
 
 # 内容新鲜度阈值：7天
@@ -38,6 +39,10 @@ class ScanLock:
     @classmethod
     def release(cls):
         cls._locked = False
+
+    @classmethod
+    def is_locked(cls) -> bool:
+        return cls._locked
 
 
 def filter_by_freshness(results: list[dict]) -> list[dict]:
@@ -75,6 +80,13 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
     """
     if not ScanLock.acquire():
         return {"status": "already_running", "new_hotspots": 0}
+
+    # 立即通知前端扫描开始
+    try:
+        await notify_scan_start()
+        print("[Scanner] notified frontend: scan started")
+    except Exception as e:
+        print(f"[Scanner] notify_scan_start error: {e}")
 
     # 总是创建自己的 session，避免外部 session 被关闭导致的问题
     should_close_db = True
@@ -142,9 +154,12 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
         except Exception as e:
             print(f"  Weibo hotsearch error: {e}")
 
+        await db.commit()
+
         return {"status": "completed", "new_hotspots": total_new}
     finally:
         ScanLock.release()
+        await notify_scan_complete(total_new)
         if should_close_db:
             await db.close()
 
