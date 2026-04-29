@@ -1,11 +1,10 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import socketio
 
 from app.config import get_settings
 from app.database import init_db, close_db
-from app.websocket import sio
+from app.websocket import router as ws_router
 from app.api.hotspots import router as hotspots_router
 from app.api.stats import router as stats_router
 from app.api.keywords import router as keywords_router
@@ -20,6 +19,16 @@ async def lifespan(app: FastAPI):
     # Startup
     await init_db()
 
+    try:
+        from app.redis import get_redis
+        redis = await get_redis()
+        await redis.ping()
+        # 清理可能残留的旧进程锁（重启前未正常释放）
+        await redis.delete("lock:scan")
+        print("✓ Redis 连接成功")
+    except Exception as e:
+        print(f"⚠ Redis 不可用，缓存和去重功能降级: {e}")
+
     # 启动定时调度器
     from app.jobs import start_scheduler
     start_scheduler()
@@ -28,6 +37,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     from app.jobs import stop_scheduler
     stop_scheduler()
+    try:
+        from app.redis import close_redis
+        await close_redis()
+    except Exception:
+        pass
     await close_db()
 
 
@@ -53,9 +67,7 @@ app.include_router(stats_router)
 app.include_router(keywords_router)
 app.include_router(notifications_router)
 app.include_router(settings_router)
-
-# Socket.IO
-socket_app = socketio.ASGIApp(sio, app)
+app.include_router(ws_router)
 
 
 @app.get("/health")

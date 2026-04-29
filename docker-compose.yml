@@ -19,6 +19,20 @@ services:
       retries: 10
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: yi-hot-monitor-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -31,6 +45,7 @@ services:
       - /app/.venv
     environment:
       DATABASE_URL: mysql+aiomysql://root:hotspot123@mysql:3306/hotspot_db
+      REDIS_URL: redis://redis:6379/0
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: hotspot123
@@ -39,6 +54,8 @@ services:
       - ./backend/.env
     depends_on:
       mysql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -59,3 +76,4 @@ services:
 
 volumes:
   mysql_data:
+  redis_data:

@@ -3,6 +3,7 @@
 
 提供系统设置的查询和更新功能。
 """
+import json
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -15,9 +16,9 @@ from app.schemas.schemas import SettingsResponse, SettingsUpdate
 router = APIRouter(prefix="/api", tags=["设置接口"])
 
 
-def get_settings_from_db(db: AsyncSession) -> SettingsResponse:
+async def get_settings_from_db(db: AsyncSession) -> SettingsResponse:
     """从数据库获取设置"""
-    result = db.execute(select(Setting))
+    result = await db.execute(select(Setting))
     settings_map = {s.key: s.value for s in result.scalars().all()}
 
     return SettingsResponse(
@@ -30,7 +31,7 @@ def get_settings_from_db(db: AsyncSession) -> SettingsResponse:
         quietHoursStart=settings_map.get("quiet_hours_start", "22:00"),
         quietHoursEnd=settings_map.get("quiet_hours_end", "08:00"),
         scanInterval=int(settings_map.get("scan_interval", "30")),
-        dataSources={"x": True, "bing": True},  # TODO: 从数据库获取
+        dataSources=_parse_data_sources(settings_map.get("data_sources", "")),
         autoScan=settings_map.get("auto_scan", "true").lower() == "true",
         openrouterApiKey=settings_map.get("openrouter_api_key", ""),
         twitterApiKey=settings_map.get("twitter_api_key", "")
@@ -49,6 +50,28 @@ async def save_setting(db: AsyncSession, key: str, value: str):
     await db.commit()
 
 
+def _parse_data_sources(raw: str) -> dict:
+    """解析数据库中存储的 data_sources 字符串为 dict"""
+    defaults = {"x": True, "bing": True, "sogou": True, "bilibili": True, "weibo": True}
+    if not raw:
+        return defaults
+    try:
+        parsed = json.loads(raw)
+        # 补齐新数据源（兼容旧格式只存了 x/bing）
+        for k, v in defaults.items():
+            parsed.setdefault(k, v)
+        return parsed
+    except (json.JSONDecodeError, TypeError):
+        raw_lower = raw.lower()
+        return {
+            "x": "'x': true" in raw_lower or '"x": true' in raw_lower,
+            "bing": "'bing': true" in raw_lower or '"bing": true' in raw_lower,
+            "sogou": "'sogou': true" in raw_lower or '"sogou": true' in raw_lower,
+            "bilibili": "'bilibili': true" in raw_lower or '"bilibili": true' in raw_lower,
+            "weibo": "'weibo': true" in raw_lower or '"weibo": true' in raw_lower,
+        }
+
+
 @router.get(
     "/settings",
     response_model=SettingsResponse,
@@ -58,7 +81,7 @@ async def save_setting(db: AsyncSession, key: str, value: str):
 )
 async def get_settings(db: AsyncSession = Depends(get_db)):
     """获取系统设置"""
-    return get_settings_from_db(db)
+    return await get_settings_from_db(db)
 
 
 @router.put(
@@ -89,10 +112,10 @@ async def update_settings(settings_data: SettingsUpdate, db: AsyncSession = Depe
                      .replace("twitterApiKey", "twitter_api_key")
 
         if isinstance(value, dict):
-            value = str(value).lower()
+            value = json.dumps(value)
         elif isinstance(value, bool):
             value = "true" if value else "false"
 
         await save_setting(db, db_key, str(value))
 
-    return get_settings_from_db(db)
+    return await get_settings_from_db(db)

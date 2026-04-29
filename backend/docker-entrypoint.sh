@@ -26,4 +26,4 @@ echo "  Migrations complete"
 
 # Start server
 echo "Starting server on port 3001..."
-exec uvicorn app.main:socket_app --host 0.0.0.0 --port 3001 --reload
+exec uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload

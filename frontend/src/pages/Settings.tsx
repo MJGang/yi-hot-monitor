@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Settings as SettingsIcon, Bell, Radar, Key, Eye, Sun, Moon, Monitor, Loader2, Check, X } from 'lucide-react'
+import { Settings as SettingsIcon, Bell, Radar, Key, Eye, Sun, Moon, Monitor, Loader2, Check, X, Globe, Tv, MessageCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useTheme } from '@/hooks/useTheme'
 import { getSettings, updateSettings, type Settings } from '@/lib/api'
@@ -36,6 +36,9 @@ export default function Settings() {
   const [scanInterval, setScanInterval] = useState(30)
   const [dataSourcesX, setDataSourcesX] = useState(true)
   const [dataSourcesBing, setDataSourcesBing] = useState(true)
+  const [dataSourcesSogou, setDataSourcesSogou] = useState(true)
+  const [dataSourcesBilibili, setDataSourcesBilibili] = useState(true)
+  const [dataSourcesWeibo, setDataSourcesWeibo] = useState(true)
   const [openrouterApiKey, setOpenrouterApiKey] = useState('')
   const [twitterApiKey, setTwitterApiKey] = useState('')
 
@@ -56,6 +59,9 @@ export default function Settings() {
       setScanInterval(data.scanInterval)
       setDataSourcesX(data.dataSources?.x ?? true)
       setDataSourcesBing(data.dataSources?.bing ?? true)
+      setDataSourcesSogou(data.dataSources?.sogou ?? true)
+      setDataSourcesBilibili(data.dataSources?.bilibili ?? true)
+      setDataSourcesWeibo(data.dataSources?.weibo ?? true)
       setOpenrouterApiKey(data.openrouterApiKey)
       setTwitterApiKey(data.twitterApiKey)
     } catch (err) {
@@ -70,12 +76,12 @@ export default function Settings() {
     fetchSettings()
   }, [fetchSettings])
 
-  // 保存设置
-  const handleSave = async () => {
+  // 保存设置，overrides 用于解决 state 异步更新导致的闭包陈旧问题
+  const handleSave = async (overrides?: Record<string, unknown>) => {
     setSaving(true)
     setSuccess(null)
     try {
-      await updateSettings({
+      const payload = {
         theme,
         browserNotify,
         emailNotify,
@@ -86,10 +92,12 @@ export default function Settings() {
         quietHoursEnd,
         autoScan,
         scanInterval,
-        dataSources: { x: dataSourcesX, bing: dataSourcesBing },
+        dataSources: { x: dataSourcesX, bing: dataSourcesBing, sogou: dataSourcesSogou, bilibili: dataSourcesBilibili, weibo: dataSourcesWeibo },
         openrouterApiKey,
         twitterApiKey,
-      })
+        ...overrides,
+      }
+      await updateSettings(payload)
       setSuccess('设置已保存')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
@@ -171,7 +179,7 @@ export default function Settings() {
                   key={value}
                   onClick={() => {
                     setTheme(value)
-                    handleSave()
+                    handleSave({ theme: value })
                   }}
                   className={clsx(
                     'flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl transition-all cursor-pointer',
@@ -206,7 +214,7 @@ export default function Settings() {
                 className={clsx('toggle-switch', browserNotify && 'active')}
                 onClick={() => {
                   setBrowserNotify(!browserNotify)
-                  handleSave()
+                  handleSave({ browserNotify: !browserNotify })
                 }}
               />
             </div>
@@ -221,7 +229,7 @@ export default function Settings() {
                 className={clsx('toggle-switch', emailNotify && 'active')}
                 onClick={() => {
                   setEmailNotify(!emailNotify)
-                  handleSave()
+                  handleSave({ emailNotify: !emailNotify })
                 }}
               />
             </div>
@@ -268,7 +276,7 @@ export default function Settings() {
                   className={clsx('toggle-switch', quietHours && 'active')}
                   onClick={() => {
                     setQuietHours(!quietHours)
-                    handleSave()
+                    handleSave({ quietHoursEnabled: !quietHours })
                   }}
                 />
               </div>
@@ -310,8 +318,9 @@ export default function Settings() {
               <select
                 value={scanInterval}
                 onChange={(e) => {
-                  setScanInterval(Number(e.target.value))
-                  handleSave()
+                  const val = Number(e.target.value)
+                  setScanInterval(val)
+                  handleSave({ scanInterval: val })
                 }}
                 className="glass-select w-full px-4 py-3 rounded-2xl text-text-primary cursor-pointer"
               >
@@ -331,8 +340,9 @@ export default function Settings() {
                     type="checkbox"
                     checked={dataSourcesX}
                     onChange={() => {
-                      setDataSourcesX(!dataSourcesX)
-                      handleSave()
+                      const newVal = !dataSourcesX
+                      setDataSourcesX(newVal)
+                      handleSave({ dataSources: { x: newVal, bing: dataSourcesBing, sogou: dataSourcesSogou, bilibili: dataSourcesBilibili, weibo: dataSourcesWeibo } })
                     }}
                     className="w-5 h-5 rounded"
                     style={{ accentColor: '#7DCTAA' }}
@@ -347,8 +357,9 @@ export default function Settings() {
                     type="checkbox"
                     checked={dataSourcesBing}
                     onChange={() => {
-                      setDataSourcesBing(!dataSourcesBing)
-                      handleSave()
+                      const newVal = !dataSourcesBing
+                      setDataSourcesBing(newVal)
+                      handleSave({ dataSources: { x: dataSourcesX, bing: newVal, sogou: dataSourcesSogou, bilibili: dataSourcesBilibili, weibo: dataSourcesWeibo } })
                     }}
                     className="w-5 h-5 rounded"
                     style={{ accentColor: '#7DCTAA' }}
@@ -356,6 +367,57 @@ export default function Settings() {
                   <span className="flex items-center gap-2">
                     <IconBing />
                     <span className="text-text-primary">Bing 搜索</span>
+                  </span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dataSourcesSogou}
+                    onChange={() => {
+                      const newVal = !dataSourcesSogou
+                      setDataSourcesSogou(newVal)
+                      handleSave({ dataSources: { x: dataSourcesX, bing: dataSourcesBing, sogou: newVal, bilibili: dataSourcesBilibili, weibo: dataSourcesWeibo } })
+                    }}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: '#7DCTAA' }}
+                  />
+                  <span className="flex items-center gap-2">
+                    <Globe className="w-5 h-5" />
+                    <span className="text-text-primary">搜狗搜索</span>
+                  </span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dataSourcesBilibili}
+                    onChange={() => {
+                      const newVal = !dataSourcesBilibili
+                      setDataSourcesBilibili(newVal)
+                      handleSave({ dataSources: { x: dataSourcesX, bing: dataSourcesBing, sogou: dataSourcesSogou, bilibili: newVal, weibo: dataSourcesWeibo } })
+                    }}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: '#7DCTAA' }}
+                  />
+                  <span className="flex items-center gap-2">
+                    <Tv className="w-5 h-5" />
+                    <span className="text-text-primary">B站 (Bilibili)</span>
+                  </span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dataSourcesWeibo}
+                    onChange={() => {
+                      const newVal = !dataSourcesWeibo
+                      setDataSourcesWeibo(newVal)
+                      handleSave({ dataSources: { x: dataSourcesX, bing: dataSourcesBing, sogou: dataSourcesSogou, bilibili: dataSourcesBilibili, weibo: newVal } })
+                    }}
+                    className="w-5 h-5 rounded"
+                    style={{ accentColor: '#7DCTAA' }}
+                  />
+                  <span className="flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="text-text-primary">微博热搜</span>
                   </span>
                 </label>
               </div>
@@ -371,7 +433,7 @@ export default function Settings() {
                 className={clsx('toggle-switch', autoScan && 'active')}
                 onClick={() => {
                   setAutoScan(!autoScan)
-                  handleSave()
+                  handleSave({ autoScan: !autoScan })
                 }}
               />
             </div>

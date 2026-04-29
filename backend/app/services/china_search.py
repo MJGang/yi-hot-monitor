@@ -9,6 +9,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from app.services.rate_limit import RateLimiter
 
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -16,25 +17,7 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
 ]
 
-RATE_LIMITER_MIN_INTERVAL = 3.0  # 搜狗搜索间隔（秒）
-
-
-class RateLimiter:
-    """请求频率限制器"""
-    def __init__(self, min_interval: float = RATE_LIMITER_MIN_INTERVAL):
-        self.min_interval = min_interval
-        self.last_request_time = 0.0
-
-    async def acquire(self):
-        """等待直到可以发送请求"""
-        import time
-        elapsed = time.time() - self.last_request_time
-        if elapsed < self.min_interval:
-            await asyncio.sleep(self.min_interval - elapsed)
-        self.last_request_time = time.time()
-
-
-sogou_rate_limiter = RateLimiter()
+sogou_rate_limiter = RateLimiter("sogou", max_per_second=1.0 / 3.0)
 
 
 def generate_buvid3() -> str:

@@ -5,6 +5,7 @@
 支持内容新鲜度过滤、并行搜索、账号检测
 """
 import asyncio
+import json
 import uuid
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_maker
 
-from app.models import Keyword, Hotspot
+from app.models import Keyword, Hotspot, Setting
 from app.services.twitter import search_twitter, parse_tweet_to_hotspot
 from app.services.china_search import search_sogou, search_bilibili_video, get_weibo_hotsearch, parse_china_result_to_hotspot
 from app.services.search import search_bing, parse_bing_result_to_hotspot
@@ -24,25 +25,58 @@ from app.websocket import notify_scan_complete, notify_scan_start
 # 内容新鲜度阈值：7天
 MAX_AGE_HOURS = 7 * 24
 
+# Redis 锁释放 Lua 脚本：只释放自己持有的锁，防止误删
+RELEASE_LOCK_SCRIPT = """
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("DEL", KEYS[1])
+else
+    return 0
+end
+"""
 
-class ScanLock:
-    """扫描锁，防止并发扫描"""
-    _locked = False
 
-    @classmethod
-    def acquire(cls) -> bool:
-        if cls._locked:
-            return False
-        cls._locked = True
-        return True
+async def _get_redis_or_none():
+    """获取 Redis 客户端，不可用时返回 None"""
+    try:
+        from app.redis import get_redis
+        return await get_redis()
+    except Exception:
+        return None
 
-    @classmethod
-    def release(cls):
-        cls._locked = False
 
-    @classmethod
-    def is_locked(cls) -> bool:
-        return cls._locked
+async def acquire_scan_lock(ttl: int = 60) -> str | None:
+    """
+    获取扫描分布式锁。返回锁 token，None 表示已被其他人持有。
+    Redis 不可用时降级放行，允许扫描继续。
+    """
+    redis = await _get_redis_or_none()
+    if redis is None:
+        return "unlocked"
+
+    token = str(uuid.uuid4())
+    acquired = await redis.set("lock:scan", token, nx=True, ex=ttl)
+    return token if acquired else None
+
+
+async def release_scan_lock(token: str | None):
+    """释放扫描锁"""
+    if token is None or token == "unlocked":
+        return
+
+    redis = await _get_redis_or_none()
+    if redis:
+        await redis.eval(RELEASE_LOCK_SCRIPT, 1, "lock:scan", token)
+
+
+async def scan_is_locked() -> bool:
+    """判断扫描是否在运行中"""
+    redis = await _get_redis_or_none()
+    if redis is None:
+        return False
+    try:
+        return bool(await redis.exists("lock:scan"))
+    except Exception:
+        return False
 
 
 def filter_by_freshness(results: list[dict]) -> list[dict]:
@@ -71,6 +105,40 @@ def filter_by_freshness(results: list[dict]) -> list[dict]:
     return filtered
 
 
+async def is_url_seen(redis, source_id: str, source: str) -> bool:
+    """Redis 层快速去重：检查 URL 是否已处理过"""
+    if redis is None:
+        return False
+    try:
+        key = f"{source}:{source_id}"
+        return bool(await redis.sismember("hotspot:seen_urls", key))
+    except Exception:
+        return False
+
+
+async def mark_url_seen(redis, source_id: str, source: str):
+    """Redis 层记录 URL 已处理"""
+    if redis is None:
+        return
+    try:
+        key = f"{source}:{source_id}"
+        await redis.sadd("hotspot:seen_urls", key)
+    except Exception:
+        pass
+
+
+async def _get_enabled_sources(db: AsyncSession) -> dict:
+    """从数据库读取启用的数据源配置"""
+    try:
+        result = await db.execute(select(Setting).where(Setting.key == "data_sources"))
+        row = result.scalar_one_or_none()
+        if row and row.value:
+            return json.loads(row.value)
+    except Exception:
+        pass
+    return {"x": True, "bing": True, "sogou": True, "bilibili": True, "weibo": True}
+
+
 async def scan_all_keywords(db: AsyncSession = None) -> dict:
     """
     扫描所有活跃关键词 + 微博热搜
@@ -78,8 +146,14 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
     Returns:
         扫描结果统计
     """
-    if not ScanLock.acquire():
+    print("[Scanner] scan_all_keywords started")
+    lock_token = await acquire_scan_lock()
+    print(f"[Scanner] scan_all_keywords lock token: {lock_token}")
+    if lock_token is None:
         return {"status": "already_running", "new_hotspots": 0}
+    print("[Scanner] scan_all_keywords lock acquired")
+    redis = await _get_redis_or_none()
+    print("[Scanner] scan_all_keywords redis")
 
     # 立即通知前端扫描开始
     try:
@@ -91,90 +165,112 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
     # 总是创建自己的 session，避免外部 session 被关闭导致的问题
     should_close_db = True
     if db is not None:
-        # 如果传入了外部 session，先关闭它
         try:
             await db.close()
-        except:
+        except Exception:
             pass
-    db = async_session_maker()
+        db = None
 
+    total_new = 0
     try:
-        total_new = 0
+        db = async_session_maker()
+
+        # 读取启用的数据源配置
+        enabled_sources = await _get_enabled_sources(db)
 
         # 1. 扫描所有活跃关键词
         result = await db.execute(select(Keyword).where(Keyword.is_active == True))
         keywords = result.scalars().all()
 
         for keyword in keywords:
-            count = await scan_keyword(db, keyword)
+            count = await scan_keyword(db, keyword, redis, enabled_sources)
             total_new += count
             # 每个关键词之间稍作延迟，避免请求过快
             await asyncio.sleep(2)
 
-        # 2. 扫描微博热搜
-        try:
-            weibo_results = await get_weibo_hotsearch()
-            if weibo_results:
-                for result in weibo_results:
-                    parsed = parse_china_result_to_hotspot(result, "微博热搜")
-                    existing = await db.execute(
-                        select(Hotspot).where(
-                            Hotspot.source_id == parsed.get("source_id"),
-                            Hotspot.source == "weibo"
+        # 2. 扫描微博热搜（受数据源开关控制）
+        if enabled_sources.get("weibo", True):
+            try:
+                weibo_results = await get_weibo_hotsearch()
+                if weibo_results:
+                    for result in weibo_results:
+                        parsed = parse_china_result_to_hotspot(result, "微博热搜")
+                        source_id = parsed.get("source_id", "")
+
+                        # Redis 快速去重
+                        if await is_url_seen(redis, source_id, "weibo"):
+                            continue
+
+                        # 数据库去重（双重保险）
+                        existing = await db.execute(
+                            select(Hotspot).where(
+                                Hotspot.source_id == source_id,
+                                Hotspot.source == "weibo"
+                            )
                         )
-                    )
-                    if existing.scalar_one_or_none():
-                        continue
-                    hotspot = Hotspot(
-                        id=str(uuid.uuid4()),
-                        title=parsed["title"][:500] if parsed["title"] else "Untitled",
-                        content=parsed["content"][:5000] if parsed["content"] else "",
-                        url=parsed.get("url", ""),
-                        source="weibo",
-                        source_id=parsed.get("source_id", ""),
-                        author="微博热搜",
-                        author_handle="",
-                        author_avatar=None,
-                        author_followers=0,
-                        author_verified=False,
-                        is_real=True,
-                        relevance=50,
-                        importance="medium",
-                        summary=parsed["title"],
-                        reason="微博实时热搜榜",
-                        published_at=None,
-                        view_count=0,
-                        like_count=0,
-                        retweet_count=0,
-                        keyword_id=None
-                    )
-                    db.add(hotspot)
-                    total_new += 1
-                print(f"  Weibo hotsearch: found {len(weibo_results)} items")
-        except Exception as e:
-            print(f"  Weibo hotsearch error: {e}")
+                        if existing.scalar_one_or_none():
+                            await mark_url_seen(redis, source_id, "weibo")
+                            continue
+
+                        hotspot = Hotspot(
+                            id=str(uuid.uuid4()),
+                            title=parsed["title"][:500] if parsed["title"] else "Untitled",
+                            content=parsed["content"][:5000] if parsed["content"] else "",
+                            url=parsed.get("url", ""),
+                            source="weibo",
+                            source_id=source_id,
+                            author="微博热搜",
+                            author_handle="",
+                            author_avatar=None,
+                            author_followers=0,
+                            author_verified=False,
+                            is_real=True,
+                            relevance=50,
+                            importance="medium",
+                            summary=parsed["title"],
+                            reason="微博实时热搜榜",
+                            published_at=None,
+                            view_count=0,
+                            like_count=0,
+                            retweet_count=0,
+                            keyword_id=None
+                        )
+                        db.add(hotspot)
+                        await mark_url_seen(redis, source_id, "weibo")
+                        total_new += 1
+                    print(f"  Weibo hotsearch: found {len(weibo_results)} items")
+            except Exception as e:
+                print(f"  Weibo hotsearch error: {e}")
 
         await db.commit()
 
         return {"status": "completed", "new_hotspots": total_new}
     finally:
-        ScanLock.release()
+        await release_scan_lock(lock_token)
         await notify_scan_complete(total_new)
-        if should_close_db:
-            await db.close()
+        if should_close_db and db is not None:
+            try:
+                await db.close()
+            except Exception:
+                pass
 
 
-async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
+async def scan_keyword(db: AsyncSession, keyword: Keyword, redis=None, enabled_sources: dict = None) -> int:
     """
     扫描单个关键词
 
     Args:
         db: 数据库会话
         keyword: 关键词对象
+        redis: Redis 客户端（可选，用于去重加速）
+        enabled_sources: 启用的数据源配置
 
     Returns:
         新增热点数量
     """
+    if enabled_sources is None:
+        enabled_sources = {"x": True, "bing": True, "sogou": True, "bilibili": True, "weibo": True}
+
     print(f"Scanning keyword: {keyword.text}")
 
     # 检测是否为平台账号
@@ -191,28 +287,34 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
             return await coro
         except Exception as e:
             print(f"  {name} search error: {e}")
-            return [] if "search" in name.lower() else {"tweets": []} if "twitter" in name.lower() else {}
+            return {"tweets": []} if "twitter" in name.lower() else []
 
-    # 并行执行所有搜索
-    twitter_coro = safe_search_coro("Twitter", search_twitter(keyword.text, query_type="Latest", limit=5))
-    sogou_coro = safe_search_coro("Sogou", search_sogou(keyword.text, limit=5))
-    bilibili_coro = safe_search_coro("Bilibili", search_bilibili_video(keyword.text, limit=3))
-    bing_coro = safe_search_coro("Bing", search_bing(keyword.text, limit=10))
+    # 根据配置决定执行哪些搜索
+    coros = {}
+    if enabled_sources.get("x", True):
+        coros["Twitter"] = safe_search_coro("Twitter", search_twitter(keyword.text, query_type="Latest", limit=5))
+    if enabled_sources.get("sogou", True):
+        coros["Sogou"] = safe_search_coro("Sogou", search_sogou(keyword.text, limit=5))
+    if enabled_sources.get("bilibili", True):
+        coros["Bilibili"] = safe_search_coro("Bilibili", search_bilibili_video(keyword.text, limit=3))
+    if enabled_sources.get("bing", True):
+        coros["Bing"] = safe_search_coro("Bing", search_bing(keyword.text, limit=10))
 
     # 并发执行
-    results = await asyncio.gather(
-        twitter_coro, sogou_coro, bing_coro, bilibili_coro
-    )
-    twitter_result, sogou_result, bing_result, bilibili_result = results
+    gathered = await asyncio.gather(*coros.values())
+    results_map = dict(zip(coros.keys(), gathered))
 
     # 处理 Twitter 结果
-    tweets = twitter_result.get("tweets", []) if isinstance(twitter_result, dict) else []
-    for tweet in tweets:
-        parsed = parse_tweet_to_hotspot(tweet, keyword.text)
-        raw_results.append(parsed)
-    print(f"  Twitter: found {len(tweets)} tweets")
+    twitter_result = results_map.get("Twitter")
+    if twitter_result:
+        tweets = twitter_result.get("tweets", []) if isinstance(twitter_result, dict) else []
+        for tweet in tweets:
+            parsed = parse_tweet_to_hotspot(tweet, keyword.text)
+            raw_results.append(parsed)
+        print(f"  Twitter: found {len(tweets)} tweets")
 
     # 处理搜狗结果
+    sogou_result = results_map.get("Sogou")
     if isinstance(sogou_result, list):
         for result in sogou_result:
             parsed = parse_china_result_to_hotspot(result, keyword.text)
@@ -220,6 +322,7 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
         print(f"  Sogou: found {len(sogou_result)} results")
 
     # 处理B站结果
+    bilibili_result = results_map.get("Bilibili")
     if isinstance(bilibili_result, list):
         for result in bilibili_result:
             parsed = parse_china_result_to_hotspot(result, keyword.text)
@@ -227,6 +330,7 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
         print(f"  Bilibili: found {len(bilibili_result)} results")
 
     # 处理 Bing 结果
+    bing_result = results_map.get("Bing")
     if isinstance(bing_result, list):
         for result in bing_result:
             parsed = parse_bing_result_to_hotspot(result, keyword.text)
@@ -248,23 +352,35 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
 
     # 保存到数据库
     new_count = 0
+    low_rel_count = 0
+    dup_count = 0
     for hotspot_data in analyzed:
         # 过滤：relevance < 50 排除
         if hotspot_data.get("relevance", 50) < 50:
+            low_rel_count += 1
             continue
 
-        # 检查是否已存在（通过 source_id 去重），过长时截断
+        # 检查是否已存在
         source_id = hotspot_data.get("source_id", "")
+        source = hotspot_data.get("source", "unknown")
         if source_id:
-            # source_id 最大 255 字符，超过则截断
             source_id = source_id[:255]
+
+            # 第一层：Redis 快速去重
+            if await is_url_seen(redis, source_id, source):
+                dup_count += 1
+                continue
+
+            # 第二层：数据库去重（保险）
             existing = await db.execute(
                 select(Hotspot).where(
                     Hotspot.source_id == source_id,
-                    Hotspot.source == hotspot_data.get("source", "unknown")
+                    Hotspot.source == source
                 )
             )
             if existing.scalar_one_or_none():
+                await mark_url_seen(redis, source_id, source)
+                dup_count += 1
                 continue
 
         # 创建新热点
@@ -273,7 +389,7 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
             title=hotspot_data["title"][:500] if hotspot_data["title"] else "Untitled",
             content=hotspot_data["content"][:5000] if hotspot_data["content"] else "",
             url=hotspot_data.get("url", ""),
-            source=hotspot_data.get("source", "unknown"),
+            source=source,
             source_id=source_id or str(uuid.uuid4()),
             author=hotspot_data.get("author"),
             author_handle=hotspot_data.get("author_handle"),
@@ -295,9 +411,10 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword) -> int:
             keyword_id=keyword.id
         )
         db.add(hotspot)
+        await mark_url_seen(redis, source_id, source)
         new_count += 1
 
     await db.commit()
-    print(f"  Saved {new_count} new hotspots for keyword: {keyword.text}")
+    print(f"  AI analyzed: {len(analyzed)}, low relevance: {low_rel_count}, duplicate: {dup_count}, saved: {new_count} for keyword: {keyword.text}")
 
     return new_count

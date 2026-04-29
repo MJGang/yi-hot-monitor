@@ -2,8 +2,10 @@
 AI 分析服务
 
 使用 LangChain + DeepSeek 分析热点内容
-支持关键词扩展、预匹配和 AI 分析
+支持关键词扩展、预匹配和 AI 分析。Redis 缓存加速重复查询。
 """
+import json as json_module
+import hashlib
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 from langchain_core.prompts import ChatPromptTemplate
@@ -22,8 +24,17 @@ llm = ChatOpenAI(
     temperature=0.3,
 )
 
-# 扩展缓存
-expansion_cache: dict[str, list[str]] = {}
+# 扩展缓存：Redis 不可用时的内存回退
+_expansion_cache: dict[str, list[str]] = {}
+
+
+async def _get_redis_or_none():
+    """获取 Redis 客户端，不可用时返回 None"""
+    try:
+        from app.redis import get_redis
+        return await get_redis()
+    except Exception:
+        return None
 
 
 def extract_core_terms(keyword: str) -> list[str]:
@@ -79,9 +90,21 @@ async def expand_keyword(keyword: str) -> list[str]:
     Returns:
         扩展后的关键词列表（含原始关键词）
     """
-    # 缓存命中
-    if keyword in expansion_cache:
-        return expansion_cache[keyword]
+    # 内存缓存命中（最快路径）
+    if keyword in _expansion_cache:
+        return _expansion_cache[keyword]
+
+    # Redis 缓存命中
+    redis = await _get_redis_or_none()
+    if redis:
+        try:
+            cached = await redis.hget("expansion:cache", keyword)
+            if cached:
+                result = json_module.loads(cached)
+                _expansion_cache[keyword] = result
+                return result
+        except Exception:
+            pass
 
     # 不管 AI 是否可用，先提取基础核心词
     core_terms = extract_core_terms(keyword)
@@ -89,7 +112,7 @@ async def expand_keyword(keyword: str) -> list[str]:
     # 无 API Key 时使用基础核心词
     if not settings.deepseek_api_key:
         result = [keyword] + core_terms
-        expansion_cache[keyword] = result
+        _expansion_cache[keyword] = result
         return result
 
     try:
@@ -114,14 +137,21 @@ async def expand_keyword(keyword: str) -> list[str]:
         content = response.content if hasattr(response, 'content') else str(response)
 
         # 解析 JSON 数组
-        import json
         import re
         json_match = re.search(r'\[[\s\S]*\]', content)
         if json_match:
-            parsed = json.loads(json_match[0])
+            parsed = json_module.loads(json_match[0])
             # 确保原始关键词和核心词都在列表中
             expanded = list(set([keyword] + core_terms + [s.strip() for s in parsed if s.strip()]))
-            expansion_cache[keyword] = expanded
+            _expansion_cache[keyword] = expanded
+
+            # 写入 Redis 缓存
+            if redis:
+                try:
+                    await redis.hset("expansion:cache", keyword, json_module.dumps(expanded))
+                except Exception:
+                    pass
+
             print(f"  Query expansion for '{keyword}': {len(expanded)} variants")
             return expanded
     except Exception as e:
@@ -129,7 +159,7 @@ async def expand_keyword(keyword: str) -> list[str]:
 
     # Fallback：使用基础核心词
     fallback = [keyword] + core_terms
-    expansion_cache[keyword] = fallback
+    _expansion_cache[keyword] = fallback
     return fallback
 
 
@@ -219,8 +249,8 @@ async def analyze_hotspot(content: str, keyword: str = "", pre_match_result: dic
         print(f"AI analysis error: {e}")
         return {
             "isReal": True,
-            "relevance": 30 if match_result["matched"] else 10,
-            "importance": "low",
+            "relevance": 60 if match_result["matched"] else 10,
+            "importance": "medium" if match_result["matched"] else "low",
             "summary": content[:50],
             "reason": "AI 分析失败，使用默认分数"
         }
@@ -240,6 +270,9 @@ async def batch_analyze(items: list[dict], keyword: str) -> list[dict]:
     # 先扩展关键词
     expanded_keywords = await expand_keyword(keyword)
 
+    # 获取 Redis 用于分析缓存
+    redis = await _get_redis_or_none()
+
     results = []
     batch_size = 3  # 并发限制
 
@@ -249,6 +282,21 @@ async def batch_analyze(items: list[dict], keyword: str) -> list[dict]:
         async def process_item(item: dict) -> Optional[dict]:
             try:
                 content = item.get("content", item.get("title", ""))
+                url = item.get("url", "")
+
+                # 检查 AI 分析缓存
+                if redis and url:
+                    try:
+                        url_hash = hashlib.md5(url.encode()).hexdigest()
+                        cache_key = f"ai:cache:{url_hash}"
+                        cached = await redis.get(cache_key)
+                        if cached:
+                            cached_data = json_module.loads(cached)
+                            # 更新 keyword_id（当前 keyword 不同但 URL 相同）
+                            cached_data["keyword_id"] = None
+                            return cached_data
+                    except Exception:
+                        pass
 
                 # 预匹配
                 pre_match = pre_match_keyword(content, expanded_keywords)
@@ -259,7 +307,7 @@ async def batch_analyze(items: list[dict], keyword: str) -> list[dict]:
                 hotspot = {
                     "title": item.get("title", ""),
                     "content": content,
-                    "url": item.get("url", ""),
+                    "url": url,
                     "source": item.get("source", "unknown"),
                     "source_id": item.get("source_id", ""),
                     "author": item.get("author"),
@@ -280,6 +328,16 @@ async def batch_analyze(items: list[dict], keyword: str) -> list[dict]:
                     "retweet_count": item.get("stats", {}).get("reposts"),
                     "keyword_id": None
                 }
+
+                # 写入分析缓存（1天过期）
+                if redis and url:
+                    try:
+                        url_hash = hashlib.md5(url.encode()).hexdigest()
+                        cache_key = f"ai:cache:{url_hash}"
+                        await redis.set(cache_key, json_module.dumps(hotspot), ex=86400)
+                    except Exception:
+                        pass
+
                 return hotspot
             except Exception as e:
                 print(f"Batch analysis error for item {item.get('title', 'unknown')}: {e}")

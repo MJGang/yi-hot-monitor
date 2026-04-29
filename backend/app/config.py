@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     smtp_pass: str = ""
     notify_email: str = ""
 
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+
     # Server
     host: str = "0.0.0.0"
     port: int = 3001
