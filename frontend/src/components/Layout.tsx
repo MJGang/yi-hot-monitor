@@ -1,28 +1,17 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Tag, Bell, Settings, Flame, Sun, Moon, Monitor, Globe, Tv, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, Tag, Bell, Settings, Flame, Sun, Moon, Monitor } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useTheme } from '../hooks/useTheme'
 import { getSettings } from '../lib/api'
-
-const IconX = () => (
-  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-    <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-  </svg>
-)
-
-const IconBing = () => (
-  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-    <path fill="#008373" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/>
-  </svg>
-)
+import { IconX, IconBing, IconWeibo, IconSogou, IconBilibili } from './icons/SourceIcons'
 
 const SOURCE_DEFS = [
   { key: 'x', label: 'X', icon: IconX, color: 'text-sky' },
   { key: 'bing', label: 'Bing', icon: IconBing, color: 'text-mint' },
-  { key: 'sogou', label: '搜狗', icon: Globe, color: 'text-coral' },
-  { key: 'bilibili', label: 'B站', icon: Tv, color: 'text-blue' },
-  { key: 'weibo', label: '微博', icon: MessageCircle, color: 'text-danger' },
+  { key: 'sogou', label: '搜狗', icon: IconSogou, color: 'text-coral' },
+  { key: 'bilibili', label: 'B站', icon: IconBilibili, color: 'text-blue' },
+  { key: 'weibo', label: '微博', icon: IconWeibo, color: 'text-danger' },
 ]
 
 const themeLabels: Record<string, string> = {
