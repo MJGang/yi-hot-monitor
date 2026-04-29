@@ -178,69 +178,24 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
         # 读取启用的数据源配置
         enabled_sources = await _get_enabled_sources(db)
 
-        # 1. 扫描所有活跃关键词
-        result = await db.execute(select(Keyword).where(Keyword.is_active == True))
-        keywords = result.scalars().all()
-
-        for keyword in keywords:
-            count = await scan_keyword(db, keyword, redis, enabled_sources)
-            total_new += count
-            # 每个关键词之间稍作延迟，避免请求过快
-            await asyncio.sleep(2)
-
-        # 2. 扫描微博热搜（受数据源开关控制）
+        # 1. 提前获取微博热搜（全局列表，获取一次即可）
+        weibo_results = []
         if enabled_sources.get("weibo", True):
             try:
                 weibo_results = await get_weibo_hotsearch()
-                if weibo_results:
-                    for result in weibo_results:
-                        parsed = parse_china_result_to_hotspot(result, "微博热搜")
-                        source_id = parsed.get("source_id", "")
-
-                        # Redis 快速去重
-                        if await is_url_seen(redis, source_id, "weibo"):
-                            continue
-
-                        # 数据库去重（双重保险）
-                        existing = await db.execute(
-                            select(Hotspot).where(
-                                Hotspot.source_id == source_id,
-                                Hotspot.source == "weibo"
-                            )
-                        )
-                        if existing.scalar_one_or_none():
-                            await mark_url_seen(redis, source_id, "weibo")
-                            continue
-
-                        hotspot = Hotspot(
-                            id=str(uuid.uuid4()),
-                            title=parsed["title"][:500] if parsed["title"] else "Untitled",
-                            content=parsed["content"][:5000] if parsed["content"] else "",
-                            url=parsed.get("url", ""),
-                            source="weibo",
-                            source_id=source_id,
-                            author="微博热搜",
-                            author_handle="",
-                            author_avatar=None,
-                            author_followers=0,
-                            author_verified=False,
-                            is_real=True,
-                            relevance=50,
-                            importance="medium",
-                            summary=parsed["title"],
-                            reason="微博实时热搜榜",
-                            published_at=None,
-                            view_count=0,
-                            like_count=0,
-                            retweet_count=0,
-                            keyword_id=None
-                        )
-                        db.add(hotspot)
-                        await mark_url_seen(redis, source_id, "weibo")
-                        total_new += 1
-                    print(f"  Weibo hotsearch: found {len(weibo_results)} items")
+                print(f"  Weibo hotsearch: fetched {len(weibo_results)} items")
             except Exception as e:
                 print(f"  Weibo hotsearch error: {e}")
+
+        # 2. 扫描所有活跃关键词（微博结果在 scan_keyword 中按关键词匹配）
+        result = await db.execute(select(Keyword).where(Keyword.is_active.is_(True)))
+        keywords = result.scalars().all()
+
+        for keyword in keywords:
+            count = await scan_keyword(db, keyword, redis, enabled_sources, weibo_results)
+            total_new += count
+            # 每个关键词之间稍作延迟，避免请求过快
+            await asyncio.sleep(2)
 
         await db.commit()
 
@@ -255,7 +210,7 @@ async def scan_all_keywords(db: AsyncSession = None) -> dict:
                 pass
 
 
-async def scan_keyword(db: AsyncSession, keyword: Keyword, redis=None, enabled_sources: dict = None) -> int:
+async def scan_keyword(db: AsyncSession, keyword: Keyword, redis=None, enabled_sources: dict = None, weibo_results: list[dict] = None) -> int:
     """
     扫描单个关键词
 
@@ -264,12 +219,15 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword, redis=None, enabled_s
         keyword: 关键词对象
         redis: Redis 客户端（可选，用于去重加速）
         enabled_sources: 启用的数据源配置
+        weibo_results: 预获取的微博热搜结果（可选）
 
     Returns:
         新增热点数量
     """
     if enabled_sources is None:
         enabled_sources = {"x": True, "bing": True, "sogou": True, "bilibili": True, "weibo": True}
+    if weibo_results is None:
+        weibo_results = []
 
     print(f"Scanning keyword: {keyword.text}")
 
@@ -279,6 +237,19 @@ async def scan_keyword(db: AsyncSession, keyword: Keyword, redis=None, enabled_s
         print(f"  Detected {account_info['platform']} account: {account_info['account_id']}")
 
     raw_results = []
+
+    # 预过滤微博热搜：标题包含关键词（或关键词片段）的条目进入 AI 分析
+    if weibo_results:
+        kw_lower = keyword.text.lower()
+        kw_parts = [p.lower() for p in keyword.text.replace('-', ' ').replace('_', ' ').replace('/', ' ').split() if len(p) >= 2]
+        for result in weibo_results:
+            title = (result.get("word") or "").lower()
+            # 完整关键词命中 或 至少一个片段命中
+            if kw_lower in title or any(part in title for part in kw_parts):
+                parsed = parse_china_result_to_hotspot(result, keyword.text)
+                raw_results.append(parsed)
+        if raw_results:
+            print(f"  Weibo: {len(raw_results)} items matched keyword '{keyword.text}'")
 
     # 并行搜索所有数据源（使用 Promise.allSettled 模式，容错）
     async def safe_search_coro(name: str, coro):
