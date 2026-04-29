@@ -28,7 +28,7 @@ function NotificationItem({ notification, onDelete }: NotificationItemProps) {
     >
       <div className="flex items-start gap-4">
         <span
-          className="icon-pill w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+          className="icon-pill w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
           style={{ background: config.bg }}
         >
           <Icon className="w-5 h-5" style={{ color: config.color }} />
@@ -83,7 +83,10 @@ export default function Notifications() {
   }, [filterType])
 
   useEffect(() => {
-    fetchNotifications()
+    const init = () => {
+      fetchNotifications()
+    }
+    init()
   }, [fetchNotifications])
 
   // 删除单条通知
