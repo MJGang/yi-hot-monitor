@@ -190,7 +190,7 @@ async def get_weibo_hotsearch() -> list[dict]:
     for item in data.get("data", {}).get("realtime", []):
         results.append({
             "title": item.get("word", ""),
-            "content": f"热搜指数: {item.get('raw_hot', 0)}",
+            "content": f"热搜指数: {item.get('num', 0)}",
             "url": f"https://s.weibo.com/weibo?q={item.get('word', '')}",
             "source": "weibo",
             "published_at": None,
