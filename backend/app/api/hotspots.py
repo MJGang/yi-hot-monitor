@@ -3,17 +3,16 @@
 
 提供热点的查询、筛选和手动扫描触发功能。
 """
-import uuid
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Hotspot, Keyword
+from app.models import Hotspot
 from app.schemas.schemas import HotspotResponse, HotspotsListResponse, ScanResponse
 from app.services.scanner import scan_all_keywords
 
@@ -87,19 +86,19 @@ def hotspot_to_response(hotspot: Hotspot, keyword_text: str = None) -> HotspotRe
     response_model=HotspotsListResponse,
     summary="获取热点列表",
     description="""
-获取热点列表，支持游标分页和多种筛选条件。
+获取热点列表，支持分页和多种筛选条件。
 
-## 筛选参数
-- **cursor**: 游标分页，传入上次返回的 `nextCursor`
-- **pageSize**: 每页数量，默认 20，最大 100
+## 查询参数
+- **page**: 页码，从1开始，默认1
+- **pageSize**: 每页数量，默认20，最大100
 - **search**: 搜索关键词（搜索 title, summary, content）
-- **sourceType**: 来源类型 (`x`, `bing`, `all`)
+- **sourceType**: 来源类型 (`x`, `weibo`, `web`, `bilibili`, `all`)
 - **priority**: 优先级 (`urgent`, `high`, `medium`, `low`, `all`)
 - **credibility**: 可信度 (`high`≥80%, `medium`≥50%, `low`≥25%, `all`)
-- **isReal**: 内容真伪 (`true`, `false`, `all`)
+- **isReal**: 内容真伪 (`real`, `fake`, `all`)
 
 ## 响应数据
-返回热点列表、下一页游标和总数。
+返回热点列表、总数、当前页码、每页条数和总页数。
     """,
     responses={
         200: {"description": "成功获取热点列表"},
@@ -107,7 +106,7 @@ def hotspot_to_response(hotspot: Hotspot, keyword_text: str = None) -> HotspotRe
     }
 )
 async def get_hotspots(
-    cursor: Optional[str] = Query(None, description="游标分页，传入上次返回的 nextCursor"),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
     pageSize: int = Query(20, ge=1, le=100, description="每页数量"),
     search: Optional[str] = Query(None, description="搜索关键词（搜索 title, summary, content）"),
     sourceType: str = Query("all", description="来源类型: x, weibo, web, bilibili, all"),
@@ -116,7 +115,7 @@ async def get_hotspots(
     isReal: str = Query("all", description="内容真伪: true, false, all"),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取热点列表（支持无限滚动）"""
+    """获取热点列表，支持分页和多种筛选条件"""
     # Build query with joinedload for keyword
     query = select(Hotspot).options(joinedload(Hotspot.keyword)).order_by(Hotspot.created_at.desc())
 
@@ -162,17 +161,8 @@ async def get_hotspots(
     elif isReal == "false":
         query = query.where(Hotspot.is_real == False)
 
-    # Execute query with limit
-    result = await db.execute(query.limit(pageSize + 1))
-    hotspots = result.scalars().all()
-
-    # Check if there are more results
-    has_next = len(hotspots) > pageSize
-    if has_next:
-        hotspots = hotspots[:pageSize]
-
-    # Get total count
-    count_query = select(Hotspot)
+    # Get total count first
+    count_query = select(func.count(Hotspot.id))
     if search:
         search_pattern = f"%{search}%"
         count_query = count_query.where(
@@ -182,13 +172,41 @@ async def get_hotspots(
                 Hotspot.content.ilike(search_pattern)
             )
         )
+    # Apply same filters to count query
+    if sourceType != "all":
+        source_mapping = {"x": ["twitter"], "weibo": ["weibo"], "web": ["sogou", "bing"], "bilibili": ["bilibili"]}
+        if sourceType in source_mapping:
+            count_query = count_query.where(Hotspot.source.in_(source_mapping[sourceType]))
+        else:
+            count_query = count_query.where(Hotspot.source == sourceType)
+    if priority != "all":
+        count_query = count_query.where(Hotspot.importance == priority)
+    if credibility == "high":
+        count_query = count_query.where(Hotspot.relevance >= 80)
+    elif credibility == "medium":
+        count_query = count_query.where(Hotspot.relevance >= 50, Hotspot.relevance < 80)
+    elif credibility == "low":
+        count_query = count_query.where(Hotspot.relevance >= 25, Hotspot.relevance < 50)
+    if isReal == "true":
+        count_query = count_query.where(Hotspot.is_real == True)
+    elif isReal == "false":
+        count_query = count_query.where(Hotspot.is_real == False)
+
     total_result = await db.execute(count_query)
-    total = len(total_result.scalars().all())
+    total = total_result.scalar() or 0
+    total_pages = max(1, (total + pageSize - 1) // pageSize)
+
+    # Execute query with limit + offset
+    offset = (page - 1) * pageSize
+    result = await db.execute(query.limit(pageSize).offset(offset))
+    hotspots = result.scalars().all()
 
     return HotspotsListResponse(
         data=[hotspot_to_response(h, h.keyword.text if h.keyword else None) for h in hotspots],
-        nextCursor=str(hotspots[-1].created_at.timestamp()) if hotspots and has_next else None,
-        total=total
+        total=total,
+        page=page,
+        pageSize=pageSize,
+        totalPages=total_pages,
     )
 
 

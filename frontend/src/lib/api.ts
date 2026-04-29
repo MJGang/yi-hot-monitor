@@ -36,11 +36,14 @@ export interface Hotspot {
 
 export interface HotspotsResponse {
   data: Hotspot[]
-  nextCursor: string | null
   total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 export interface Stats {
+  totalHotspots: number
   todayHotspots: number
   credibilityRate: number
   collectionStatus: 'running' | 'stopped'
@@ -83,14 +86,14 @@ export interface Settings {
   quietHoursStart: string
   quietHoursEnd: string
   scanInterval: number
-  dataSources: { x: boolean; bing: boolean }
+  dataSources: { x: boolean; bing: boolean; sogou: boolean; bilibili: boolean; weibo: boolean }
   autoScan: boolean
   openrouterApiKey: string
   twitterApiKey: string
 }
 
 export interface HotspotFilters {
-  cursor?: string
+  page?: number
   pageSize?: number
   search?: string
   sourceType?: 'all' | 'x' | 'weibo' | 'web' | 'bilibili'
@@ -115,7 +118,7 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
 
 export async function getHotspots(filters: HotspotFilters = {}): Promise<HotspotsResponse> {
   const params = new URLSearchParams()
-  if (filters.cursor) params.set('cursor', filters.cursor)
+  if (filters.page) params.set('page', String(filters.page))
   if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
   if (filters.search) params.set('search', filters.search)
   if (filters.sourceType && filters.sourceType !== 'all') params.set('sourceType', filters.sourceType)

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import Hotspot
 from app.schemas.schemas import StatsResponse
-from app.services.scanner import ScanLock
+from app.services.scanner import scan_is_locked
 
 router = APIRouter(prefix="/api", tags=["统计接口"])
 
@@ -58,7 +58,8 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     credibility_rate = int((high_cred / total * 100)) if total > 0 else 0
 
     return StatsResponse(
-        today_hotspots=today_hotspots,
-        credibility_rate=credibility_rate,
-        collection_status="running" if ScanLock.is_locked() else "stopped"
+        totalHotspots=total,
+        todayHotspots=today_hotspots,
+        credibilityRate=credibility_rate,
+        collectionStatus="running" if await scan_is_locked() else "stopped"
     )

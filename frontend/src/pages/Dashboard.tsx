@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ParticleField } from '@/components/ui/Particle'
 import { GlareCard } from '@/components/ui/glare-card'
 import { getHotspots, getStats, triggerScan, type Hotspot, type HotspotFilters, type Stats } from '@/lib/api'
-import { io, Socket } from 'socket.io-client'
+import Pagination from '@/components/ui/Pagination'
 
 // 筛选器配置
 interface FilterState {
@@ -316,19 +316,32 @@ export default function Dashboard() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters)
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
+  const [totalHotspots, setTotalHotspots] = useState(0)
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showNewToast, setShowNewToast] = useState(false)
-  const socketRef = useRef<Socket | null>(null)
-  const newCountRef = useRef(0) // 用来在 toast 中显示
+  const [newCount, setNewCount] = useState(0)
+  const wsRef = useRef<WebSocket | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // Pagination state
+  const [pageNum, setPageNum] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const filtersRef = useRef<HotspotFilters>({})
+  const pageSizeRef = useRef(20)
 
   // 获取热点数据
-  const fetchHotspots = useCallback(async (filterParams: HotspotFilters = {}) => {
+  const fetchHotspots = useCallback(async (filterParams: HotspotFilters, page?: number, size?: number) => {
     try {
       setError(null)
-      const response = await getHotspots(filterParams)
+      const sz = size ?? pageSizeRef.current
+      const pg = page ?? 1
+      const response = await getHotspots({ ...filterParams, page: pg, pageSize: sz })
       setHotspots(response.data)
+      setTotalHotspots(response.total)
+      setTotalPages(response.totalPages)
     } catch (err) {
       setError('获取热点数据失败')
       console.error(err)
@@ -345,70 +358,128 @@ export default function Dashboard() {
     }
   }, [])
 
+  // Navigation handlers
+  const goToPage = (page: number) => {
+    setPageNum(page)
+    listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    fetchHotspots(filtersRef.current, page, pageSizeRef.current)
+  }
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size)
+    pageSizeRef.current = size
+    setPageNum(1)
+    fetchHotspots(filtersRef.current, 1, size)
+  }
+
   // 初始加载
   useEffect(() => {
-    setLoading(true)
-    Promise.all([fetchHotspots(), fetchStats()]).finally(() => setLoading(false))
-  }, [fetchHotspots, fetchStats])
-
-  // WebSocket 连接 - 开发环境直连后端
-  useEffect(() => {
-    const socketUrl = import.meta.env.DEV ? 'http://localhost:3001' : '/'
-    const socket = io(socketUrl, {
-      path: '/socket.io',
-      transports: ['websocket', 'polling']
-    })
-    socketRef.current = socket
-
-    socket.on('scan:start', () => {
-      setScanning(true)
-      fetchStats()
-    })
-
-    socket.on('scan:complete', (data: { new_hotspots: number }) => {
-      setScanning(false)
-      if (data.new_hotspots > 0) {
-        newCountRef.current = data.new_hotspots
-        setShowNewToast(true)
-        // 3秒后隐藏 toast
-        setTimeout(() => setShowNewToast(false), 3000)
+    let isMounted = true
+    const initData = async () => {
+      try {
+        await Promise.all([fetchHotspots(filtersRef.current, 1, pageSize), fetchStats()])
+      } catch (err) {
+        console.error("Initialization failed", err)
+      } finally {
+        if (isMounted) setLoading(false)
       }
-      // 更新统计数据
-      fetchStats()
-    })
+    }
 
-    // 获取初始状态
-    fetchStats()
+    initData()
+
+    return () => { isMounted = false }
+  }, [fetchHotspots, fetchStats, pageSize])
+
+  // WebSocket 连接
+  useEffect(() => {
+    let ws: WebSocket | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false
+
+    const connect = () => {
+      if (cancelled) return
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.hostname}:3001/ws`)
+      wsRef.current = ws
+
+      ws.onmessage = (event) => {
+        console.log('onmessage', event)
+        try {
+          const msg = JSON.parse(event.data)
+          switch (msg.type) {
+            case 'scan:status':
+              setScanning(msg.scanning)
+              break
+            case 'scan:start':
+              setScanning(true)
+              break
+            case 'scan:complete':
+              setScanning(false)
+              if (msg.new_hotspots > 0) {
+                setNewCount(msg.new_hotspots)
+                setShowNewToast(true)
+                setTimeout(() => setShowNewToast(false), 3000)
+              }
+              fetchStats()
+              fetchHotspots(filtersRef.current, pageNum, pageSizeRef.current)
+              break
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      }
+
+      ws.onopen = () => {
+        fetchStats()
+      }
+
+      ws.onclose = () => {
+        if (!cancelled) {
+          reconnectTimer = setTimeout(connect, 3000)
+        }
+      }
+    }
+
+    connect()
 
     return () => {
-      socket.disconnect()
+      cancelled = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      if (ws) {
+        ws.onclose = null
+        ws.close()
+      }
     }
-  }, [fetchStats])
+  }, [fetchStats, fetchHotspots])
 
   // 处理扫描
   const handleScan = async () => {
-    setScanning(true)
     try {
       await triggerScan()
       // 数据刷新由 WebSocket 推送处理，这里只需等待
     } catch (err) {
       console.error('扫描失败', err)
-    } finally {
-      setScanning(false)
     }
   }
 
+  // Build HotspotFilters from FilterState
+  const buildFilters = (state: FilterState): HotspotFilters => ({
+    search: state.search || undefined,
+    sourceType: state.sourceType,
+    priority: state.priority,
+    credibility: state.credibility,
+    isReal: state.isReal,
+  })
+
   // 处理筛选变化 - 重新获取数据
   const handleFilterChange = (key: keyof FilterState, value: FilterState[keyof FilterState]) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
-    // 重新获取数据，传入新的筛选条件
-    fetchHotspots({
-      search: key === 'search' ? value as string : filters.search,
-      sourceType: key === 'sourceType' ? value as FilterState['sourceType'] : filters.sourceType,
-      priority: key === 'priority' ? value as FilterState['priority'] : filters.priority,
-      credibility: key === 'credibility' ? value as FilterState['credibility'] : filters.credibility,
-      isReal: key === 'isReal' ? value as FilterState['isReal'] : filters.isReal,
-    })
+    const newState = { ...filters, [key]: value }
+    setFilters(newState)
+    const apiFilters = buildFilters(newState)
+    filtersRef.current = apiFilters
+    setPageNum(1)
+    fetchHotspots(apiFilters, 1, pageSizeRef.current)
   }
 
   // 计算活跃筛选器数量
@@ -427,7 +498,9 @@ export default function Dashboard() {
   // 重置所有筛选器
   const resetFilters = () => {
     setFilters(defaultFilters)
-    fetchHotspots()
+    filtersRef.current = {}
+    setPageNum(1)
+    fetchHotspots({}, 1, pageSizeRef.current)
   }
 
   // 更新筛选器（不触发请求）
@@ -444,15 +517,15 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-xl bg-mint/20 border border-mint/40 backdrop-blur-md shadow-lg cursor-pointer hover:bg-mint/30 transition-colors"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-xl bg-mint/20 border border-mint/40 backdrop-blur-md shadow-lg cursor-pointer hover:bg-mint/30 transition-colors"
             onClick={() => {
-              fetchHotspots()
+              fetchHotspots(filtersRef.current, pageNum, pageSizeRef.current)
               fetchStats()
               setShowNewToast(false)
             }}
           >
             <ArrowUp className="w-4 h-4 text-mint" />
-            <span className="text-sm font-medium text-mint">发现 {newCountRef.current} 条新内容，点击查看</span>
+            <span className="text-sm font-medium text-mint">发现 {newCount} 条新内容，点击查看</span>
           </motion.button>
         )}
       </AnimatePresence>
@@ -540,29 +613,16 @@ export default function Dashboard() {
             <span>{scanning ? '扫描中...' : '立即扫描'}</span>
           </motion.button>
 
-          {/* Stats Display */}
-          <div className="hidden lg:flex items-center gap-4 ml-4 pl-4 border-l border-white/20">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-text-muted">今日</span>
-              <span className="text-sm font-bold text-text-primary">{stats?.todayHotspots || 0}</span>
-              <span className="text-xs text-text-muted">热点</span>
-            </div>
-            <div className="w-px h-4 bg-white/20" />
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-text-muted">可信率</span>
-              <span className="text-sm font-bold" style={{ color: '#7DCTAA' }}>{stats?.credibilityRate || 0}%</span>
-            </div>
-            <div className="w-px h-4 bg-white/20" />
-            <div className="flex items-center gap-2">
-              <motion.span
-                className={clsx('w-2 h-2 rounded-full', stats?.collectionStatus === 'running' ? 'bg-mint' : 'bg-gray-400')}
-                animate={stats?.collectionStatus === 'running' ? {
-                  boxShadow: ['0 0 8px rgba(125,205,170,0.8)', '0 0 16px rgba(125,205,170,1)', '0 0 8px rgba(125,205,170,0.8)']
-                } : {}}
-                transition={{ duration: 2, repeat: stats?.collectionStatus === 'running' ? Infinity : 0 }}
-              />
-              <span className="text-xs text-text-muted">{stats?.collectionStatus === 'running' ? '采集中' : '已停止'}</span>
-            </div>
+          {/* Compact status indicator */}
+          <div className="hidden sm:flex items-center gap-2 ml-4 pl-4 border-l border-white/20">
+            <motion.span
+              className={clsx('w-2 h-2 rounded-full', scanning ? 'bg-mint' : 'bg-gray-400')}
+              animate={scanning ? {
+                boxShadow: ['0 0 8px rgba(125,205,170,0.8)', '0 0 16px rgba(125,205,170,1)', '0 0 8px rgba(125,205,170,0.8)']
+              } : {}}
+              transition={{ duration: 2, repeat: scanning ? Infinity : 0 }}
+            />
+            <span className="text-xs text-text-muted">{scanning ? '采集中' : '已停止'}</span>
           </div>
         </div>
       </div>
@@ -649,11 +709,83 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Stats Summary Bar - 总览关键指标 */}
+      <div className="relative z-10 px-4 sm:px-6 pt-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Total Hotspots */}
+          <div className="liquid-glass rounded-2xl px-4 py-3 flex items-center gap-3 border border-white/10">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <Flame className="w-5 h-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-text-muted truncate">热点总数</p>
+              <p className="text-xl font-bold text-text-primary tabular-nums leading-tight">
+                {stats ? stats.totalHotspots.toLocaleString() : totalHotspots.toLocaleString() || '0'}
+              </p>
+            </div>
+          </div>
+
+          {/* Today's Hotspots */}
+          <div className="liquid-glass rounded-2xl px-4 py-3 flex items-center gap-3 border border-white/10">
+            <div className="w-10 h-10 rounded-xl bg-sky/15 flex items-center justify-center shrink-0">
+              <Zap className="w-5 h-5 text-sky" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-text-muted truncate">今日新增</p>
+              <p className="text-xl font-bold text-text-primary tabular-nums leading-tight">
+                {stats?.todayHotspots?.toLocaleString() || '0'}
+              </p>
+            </div>
+          </div>
+
+          {/* Credibility Rate */}
+          <div className="liquid-glass rounded-2xl px-4 py-3 flex items-center gap-3 border border-white/10">
+            <div className="w-10 h-10 rounded-xl bg-success/15 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-5 h-5 text-success" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-text-muted truncate">可信率</p>
+              <p className="text-xl font-bold tabular-nums leading-tight" style={{ color: '#7DCTAA' }}>
+                {stats?.credibilityRate || 0}%
+              </p>
+            </div>
+          </div>
+
+          {/* Collection Status */}
+          <div className="liquid-glass rounded-2xl px-4 py-3 flex items-center gap-3 border border-white/10">
+            <div className={clsx(
+              'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+              scanning ? 'bg-mint/15' : 'bg-gray-400/15'
+            )}>
+              <Radar className={clsx('w-5 h-5', scanning ? 'text-mint' : 'text-gray-400')} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-text-muted truncate">采集状态</p>
+              <div className="flex items-center gap-1.5">
+                <motion.span
+                  className={clsx('w-2 h-2 rounded-full', scanning ? 'bg-mint' : 'bg-gray-400')}
+                  animate={scanning ? {
+                    boxShadow: ['0 0 6px rgba(125,205,170,0.8)', '0 0 12px rgba(125,205,170,1)', '0 0 6px rgba(125,205,170,0.8)']
+                  } : {}}
+                  transition={{ duration: 2, repeat: scanning ? Infinity : 0 }}
+                />
+                <span className="text-sm font-semibold text-text-primary">
+                  {scanning ? '采集中' : '已停止'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
       {/* Animated Background */}
       <ParticleField count={20} color="rgba(201, 177, 255, 0.4)" className="absolute inset-0 z-0" />
 
-      {/* Hotspots Grid */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-3 relative z-10">
+      {/* Content + Pagination Footer */}
+      <div className="flex-1 flex flex-col relative z-10 min-h-0">
+        {/* Hotspots Grid - scrollable */}
+        <div ref={listRef} className="flex-1 overflow-y-auto p-6 pb-3 space-y-3">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -671,7 +803,7 @@ export default function Dashboard() {
             <h3 className="text-lg font-semibold text-text-primary mb-2">加载失败</h3>
             <p className="text-sm text-text-muted mb-4">{error}</p>
             <button
-              onClick={() => fetchHotspots()}
+              onClick={() => fetchHotspots(filtersRef.current, pageNum, pageSizeRef.current)}
               className="px-4 py-2 rounded-xl bg-primary/20 text-primary text-sm font-medium hover:bg-primary/30 transition-colors cursor-pointer"
             >
               重试
@@ -709,6 +841,20 @@ export default function Dashboard() {
             )}
           </motion.div>
         )}
+
+        </div>
+
+        {/* Pagination Footer - fixed at bottom, doesn't scroll */}
+        <Pagination
+          currentStart={hotspots.length > 0 ? (pageNum - 1) * pageSize + 1 : 0}
+          currentEnd={(pageNum - 1) * pageSize + hotspots.length}
+          total={totalHotspots}
+          pageSize={pageSize}
+          currentPage={pageNum}
+          totalPages={totalPages}
+          onPageChange={goToPage}
+          onPageSizeChange={handlePageSizeChange}
+        />
       </div>
     </>
   )

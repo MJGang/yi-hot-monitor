@@ -74,10 +74,12 @@ class HotspotResponse(BaseModel):
 
 
 class HotspotsListResponse(BaseModel):
-    """热点列表响应（无限滚动）"""
+    """热点列表响应"""
     data: list[HotspotResponse]
-    nextCursor: Optional[str] = None  # 下一页游标
-    total: int = 0                     # 总数量
+    total: int = 0
+    page: int = 1
+    pageSize: int = 20
+    totalPages: int = 0
 
 
 # ============== Notification Schemas ==============
@@ -118,7 +120,7 @@ class SettingsResponse(BaseModel):
     quietHoursStart: str = "22:00"        # 静默开始时间
     quietHoursEnd: str = "08:00"          # 静默结束时间
     scanInterval: int = 30                # 扫描间隔（分钟）
-    dataSources: dict = {"x": True, "bing": True}  # 数据源
+    dataSources: dict = {"x": True, "bing": True, "sogou": True, "bilibili": True, "weibo": True}
     autoScan: bool = True                 # 自动扫描
     openrouterApiKey: str = ""            # OpenRouter API Key
     twitterApiKey: str = ""               # Twitter API Key
@@ -148,6 +150,7 @@ class SettingsUpdate(BaseModel):
 
 class StatsResponse(BaseModel):
     """统计响应模型"""
+    totalHotspots: int = 0      # 热点总数
     todayHotspots: int = 0      # 今日热点数
     credibilityRate: int = 0    # 可信度比率
     collectionStatus: str = "stopped"  # running, stopped
